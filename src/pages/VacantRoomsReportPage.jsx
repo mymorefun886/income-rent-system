@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { BarChart3, Home, Table2 } from "lucide-react";
 import { apiEnabled, fetchExpenses, fetchProperties, fetchRecords, fetchTenants } from "../lib/api";
-import { properties as fallbackProperties, tenants as fallbackTenants } from "../lib/mock-data";
 
 function normalizeRoomKey(v) {
   return String(v || "").replace(/\s+/g, "").toUpperCase();
@@ -96,8 +95,8 @@ function buildVacantRows(properties, tenants) {
 
 export default function VacantRoomsReportPage() {
   const [tab, setTab] = useState("vacant");
-  const [properties, setProperties] = useState(fallbackProperties);
-  const [tenants, setTenants] = useState(fallbackTenants);
+  const [properties, setProperties] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [records, setRecords] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [utilCycle, setUtilCycle] = useState(new Date().toISOString().slice(0,7));
