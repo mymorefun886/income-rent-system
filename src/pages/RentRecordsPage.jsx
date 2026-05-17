@@ -304,25 +304,26 @@ const RentRecordsPage = () => {
     const fromTenants = (tenants || [])
       .map((t) => {
         const roomText = t.building ? `${t.building} ${t.room || ""}` : t.room || "";
+        const key = makeRoomKey(t.building, t.room);
         const archived = Boolean(t.archived);
-        return { key: makeRoomKey(t.building, t.room), roomText, label: roomText + (archived ? " (已退租)" : ""), tenantId: t.id, tenantName: t.name || "", rent: Number(t.rent || 0), archived };
+        // 同一房号有活跃租客时不标"(已退租)"
+        const showArchived = archived && !activeTenantKeys.has(key);
+        return { key, roomText, label: roomText + (showArchived ? " (已退租)" : ""), tenantId: t.id, tenantName: t.name || "", rent: Number(t.rent || 0), archived };
       });
-    // 从账单记录中补充退租/历史房号（不在租客列表中）
+    // 从账单记录中补充退租/历史房号（只有当前无租客时才添加）
     const seen = new Set(fromTenants.map((x) => x.key));
     const fromRecords = (records || [])
       .filter((r) => {
         const p = parseRoomText(r.room || "");
         const key = makeRoomKey(p.building, p.room);
-        return key && !seen.has(key);
+        return key && !seen.has(key) && !activeTenantKeys.has(key);
       })
       .reduce((acc, r) => {
-        // 去重：每房号只保留一条
         const p = parseRoomText(r.room || "");
         const key = makeRoomKey(p.building, p.room);
         if (acc.find(x => x.key === key)) return acc;
         acc.push({
-          key,
-          roomText: p.building ? `${p.building} ${p.room}` : r.room || "",
+          key, roomText: p.building ? `${p.building} ${p.room}` : r.room || "",
           label: (p.building ? `${p.building} ${p.room}` : r.room || "") + " (已退租)",
           tenantId: "", tenantName: r.tenant || "已退租", rent: 0, archived: true
         });
