@@ -192,6 +192,7 @@ const RentRecordsPage = () => {
   const [quickPayError, setQuickPayError] = useState("");
   const [billImages, setBillImages] = useState([]);
   const [generatingImages, setGeneratingImages] = useState(false);
+  const [csvPasteText, setCsvPasteText] = useState("");
   const [singleCard, setSingleCard] = useState(null);
   const cardRefs = useRef({});
   const [form, setForm] = useState(defaultForm());
@@ -1162,6 +1163,29 @@ const RentRecordsPage = () => {
           <button className="inline-flex items-center gap-2 rounded-xl border border-violet-200 px-3 py-2 text-sm text-violet-700" type="button" onClick={downloadMeterHtml}>📱 下载手机抄表页</button>
           <button className="inline-flex items-center gap-2 rounded-xl border border-pink-200 px-3 py-2 text-sm text-pink-700" type="button" onClick={generateBillImages} disabled={generatingImages}><Image className="h-4 w-4" />{generatingImages ? "生成中..." : "生成账单图片"}</button>
         </div>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm text-slate-600">📋 粘贴 CSV 内容直接导入</summary>
+          <textarea
+            className="mt-2 w-full rounded-xl border border-slate-300 p-3 text-xs font-mono"
+            rows={5}
+            placeholder="building,room,electricNow,waterNow
+西山东区17号,101,6910,268
+西山东区17号,102,7220,272"
+            value={csvPasteText}
+            onChange={(e) => setCsvPasteText(e.target.value)}
+          />
+          <button
+            className="mt-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm text-white font-medium disabled:opacity-50"
+            type="button"
+            disabled={!csvPasteText.trim()}
+            onClick={async () => {
+              const blob = new Blob(["﻿"+csvPasteText], {type:"text/csv"});
+              const file = new File([blob], "paste.csv", {type:"text/csv"});
+              await handleMeterCsvImport(file);
+              setCsvPasteText("");
+            }}
+          >⚡ 一键导入</button>
+        </details>
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">

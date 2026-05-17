@@ -10,6 +10,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ContractsPage = lazy(() => import("./pages/ContractsPage"));
 const HelpPage = lazy(() => import("./pages/HelpPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
+const MeterInputPage = lazy(() => import("./pages/MeterInputPage"));
 const MonthlyRentWorkbenchPage = lazy(() => import("./pages/MonthlyRentWorkbenchPage"));
 const ExpensesPage = lazy(() => import("./pages/ExpensesPage"));
 const PropertiesPage = lazy(() => import("./pages/PropertiesPage"));
@@ -38,6 +39,7 @@ const allRoutes = [
   { path: "/tenants", Page: TenantsPage },
   { path: "/contracts", Page: ContractsPage },
   { path: "/records", Page: RentRecordsPage },
+  { path: "/meter-input", Page: MeterInputPage },
   { path: "/monthly-rent", Page: MonthlyRentWorkbenchPage },
   { path: "/expenses", Page: ExpensesPage },
   { path: "/work-orders", Page: WorkOrdersPage },
