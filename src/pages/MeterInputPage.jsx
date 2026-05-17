@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { RefreshCw, Save, Send } from "lucide-react";
+import { Download, Printer, RefreshCw, Send } from "lucide-react";
 import { apiEnabled, createRecord, fetchProperties, fetchRecords, fetchTenants, updateRecord } from "../lib/api";
 
 function makeRoomKey(b, r) { return (b||"").trim()+"::"+(r||"").replace(/\s+/g,"").toUpperCase(); }
@@ -140,6 +140,64 @@ export default function MeterInputPage() {
     finally { setSaving(false); }
   }
 
+  function downloadMeterHtml() {
+    const roomsForOffline = rooms.map(r => ({ b: r.b, r: r.r, ep: r.ep, wp: r.wp }));
+    const dataJson = JSON.stringify(roomsForOffline);
+    const html = '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>抄表录入</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font:14px "Microsoft YaHei",sans-serif;background:#f0f4f8;color:#1e293b;padding:8px;max-width:480px;margin:0 auto}.h{background:#2563eb;color:#fff;padding:12px 16px;border-radius:12px;margin-bottom:10px}.h h1{font-size:18px}.h div{font-size:12px;opacity:.8;margin-top:2px}.bld{background:#dbeafe;padding:8px 12px;border-radius:8px;font-weight:bold;font-size:13px;margin:8px 0 4px;display:flex;justify-content:space-between}.row{background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:4px;display:flex;align-items:center;gap:8px}.room{font-weight:bold;font-size:16px;min-width:36px}.inp{flex:1;display:flex;flex-direction:column}.inp label{font-size:10px;color:#64748b}.inp input{width:100%;border:1px solid #cbd5e1;border-radius:6px;padding:8px 6px;font-size:15px;text-align:center}.inp input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px #bfdbfe}.prev{font-size:10px;color:#94a3b8;text-align:right;min-width:28px}.btns{position:sticky;bottom:8px;background:#fff;border-radius:12px;padding:12px;margin-top:12px;box-shadow:0 -2px 12px rgba(0,0,0,.08);display:flex;gap:8px}.btns button{flex:1;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer}.btn-save{background:#2563eb;color:#fff}.btn-export{background:#10b981;color:#fff}.btn-clear{background:#f1f5f9;color:#64748b}.toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:99;opacity:0;transition:opacity .3s}.toast.show{opacity:1}</style></head><body><div class="h"><h1>抄表录入</h1><div>离线可用 · 数据存手机 · 回家导出 CSV</div></div><div id="app"></div><div class="btns"><button class="btn-clear" onclick="clearAll()">清空</button><button class="btn-save" onclick="saveData()">暂存</button><button class="btn-export" onclick="exportData()">导出 CSV</button></div><div class="toast" id="toast"></div><script>var ROOMS=' + dataJson + ';var CYCLE=new Date().toISOString().slice(0,7);var STORAGE_KEY="meter_"+CYCLE;function showToast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},1500)}function loadData(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}}catch(e){return{}}}function saveData(){var d={};document.querySelectorAll(".row").forEach(function(r){var rid=r.dataset.rid;var e=r.querySelector(".e").value;var w=r.querySelector(".w").value;if(e||w)d[rid]=[e,w]});localStorage.setItem(STORAGE_KEY,JSON.stringify(d));showToast("已暂存 "+Object.keys(d).length+" 条")}function exportData(){saveData();var d=loadData();var lines=["building,room,electricNow,waterNow"];ROOMS.forEach(function(r){var v=d[r.b+"::"+r.r]||["",""];if(v[0]||v[1])lines.push(r.b+","+r.r+","+v[0]+","+v[1])});var csv="\\uFEFF"+lines.join("\\n");var blob=new Blob([csv],{type:"text/csv"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="meter_"+CYCLE+".csv";a.click();showToast("已导出 "+(lines.length-1)+" 条到 CSV")}function clearAll(){if(confirm("确定清空？")){localStorage.removeItem(STORAGE_KEY);render();showToast("已清空")}}function render(){var d=loadData();var groups={};ROOMS.forEach(function(r){var b=r.b||"其他";if(!groups[b])groups[b]=[];groups[b].push(r)});var h="";Object.keys(groups).forEach(function(b){var rs=groups[b];h+=\'<div class="bld">\'+b+\' <span>\'+rs.length+\'间</span></div>\';rs.forEach(function(r){var v=d[r.b+"::"+r.r]||["",""];h+=\'<div class="row" data-rid="\'+r.b+\'::\'+r.r+\'">\';h+=\'<div class="room">\'+r.r+\'</div>\';h+=\'<div class="inp"><label>电(度)</label><input class="e" type="number" step="1" inputmode="numeric" value="\'+v[0]+\'"></div>\';h+=\'<div class="prev">\'+(r.ep?"上"+r.ep:"")+\'</div>\';h+=\'<div class="inp"><label>水(方)</label><input class="w" type="number" step="0.1" inputmode="decimal" value="\'+v[1]+\'"></div>\';h+=\'<div class="prev">\'+(r.wp?"上"+r.wp:"")+\'</div>\';h+=\'</div>\'})});document.getElementById("app").innerHTML=h}render();</script></body></html>';
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "meter_" + cycle + ".html";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setMsg("已下载 meter_" + cycle + ".html，可发送到手机离线使用");
+  }
+
+  function printMeterTemplate() {
+    const groups = {};
+    rooms.forEach(r => { const b = r.b||"其他"; if (!groups[b]) groups[b] = []; groups[b].push(r); });
+    const now = new Date().toLocaleDateString("zh-CN");
+    let allHtml = "";
+    let total = 0;
+    Object.entries(groups).forEach(([building, rs]) => {
+      const half = Math.ceil(rs.length / 2);
+      const left = rs.slice(0, half);
+      const right = rs.slice(half);
+      total += rs.length;
+      let rows = "";
+      const maxRows = Math.max(left.length, right.length);
+      for (let i = 0; i < maxRows; i++) {
+        const l = left[i];
+        const r = right[i];
+        rows += `<tr>
+          <td style="text-align:center;">${l ? `<b>${l.r}</b>` : ""}</td>
+          <td><div style="border-bottom:1px solid #94a3b8;min-height:20px;"></div></td>
+          <td><div style="border-bottom:1px solid #94a3b8;min-height:20px;"></div></td>
+          <td></td>
+          <td style="text-align:center;">${r ? `<b>${r.r}</b>` : ""}</td>
+          <td><div style="border-bottom:1px solid #94a3b8;min-height:20px;"></div></td>
+          <td><div style="border-bottom:1px solid #94a3b8;min-height:20px;"></div></td>
+        </tr>`;
+      }
+      allHtml += `<tr><td colspan="8" style="background:#dbeafe;font-weight:bold;padding:4px 8px;font-size:13px;">${building}（${rs.length}间）</td></tr>${rows}`;
+    });
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>抄表 ${cycle}</title>
+<style>@page{size:A4 portrait;margin:10mm;}body{font-family:'Microsoft YaHei',sans-serif;font-size:13px;color:#1e293b;margin:0;}h1{font-size:17px;margin:0 0 4px 0;}.info{color:#64748b;font-size:11px;margin-bottom:10px;}table{width:100%;border-collapse:collapse;}th{background:#f1f5f9;padding:4px 6px;font-size:11px;border-bottom:2px solid #94a3b8;}td{border-bottom:1px solid #e2e8f0;padding:3px 5px;}.noprint{display:none;}.col-label{font-size:9px;color:#94a3b8;text-align:center;}</style></head>
+<body>
+  <h1>抄表记录 ${cycle}</h1>
+  <div class="info">打印日期：${now} &nbsp;|&nbsp; 共 ${total} 间 &nbsp;|&nbsp; 请在空白格内填写本月表底读数 <button onclick="window.print()" style="margin-left:16px;font-size:12px;padding:3px 14px;">🖨 打印</button></div>
+  <table>
+    <thead>
+      <tr><th style="width:30px;"></th><th style="width:70px;"><div class="col-label">电表(度)</div></th><th style="width:70px;"><div class="col-label">水表(方)</div></th><th style="width:24px;"></th><th style="width:30px;"></th><th style="width:70px;"><div class="col-label">电表(度)</div></th><th style="width:70px;"><div class="col-label">水表(方)</div></th></tr>
+    </thead>
+    <tbody>${allHtml}</tbody>
+  </table>
+</body></html>`;
+    const w = window.open("about:blank", "_blank", "width=700,height=900");
+    if (!w) { setMsg("打印窗口被拦截，请允许弹窗"); return; }
+    w.document.open(); w.document.write(html); w.document.close(); w.focus();
+  }
+
   if (loading) return <div className="flex items-center justify-center min-h-screen"><p className="text-slate-500">加载中...</p></div>;
 
   const groups = {};
@@ -179,9 +237,15 @@ export default function MeterInputPage() {
         </div>
       ))}
 
-      <div className="sticky bottom-2 flex gap-2 bg-white rounded-2xl p-3 shadow-lg ring-1 ring-slate-200">
-        <button className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-medium" onClick={() => { setReadings({}); localStorage.removeItem(STORAGE_KEY); setSavedCount(0); }}>清空</button>
-        <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={syncToSystem}><Send className="inline h-4 w-4 mr-1" />{saving?"同步中...":"一键同步"}</button>
+      <div className="sticky bottom-2 bg-white rounded-2xl p-3 shadow-lg ring-1 ring-slate-200 space-y-2">
+        <div className="flex gap-2">
+          <button className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-medium" onClick={() => { setReadings({}); localStorage.removeItem(STORAGE_KEY); setSavedCount(0); }}>清空读数</button>
+          <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={syncToSystem}><Send className="inline h-4 w-4 mr-1" />{saving?"同步中...":"一键同步"}</button>
+        </div>
+        <div className="flex gap-2">
+          <button className="flex-1 rounded-xl bg-emerald-50 border border-emerald-200 py-2.5 text-sm font-medium text-emerald-700" onClick={downloadMeterHtml}><Download className="inline h-4 w-4 mr-1" />下载离线页</button>
+          <button className="flex-1 rounded-xl bg-amber-50 border border-amber-200 py-2.5 text-sm font-medium text-amber-700" onClick={printMeterTemplate}><Printer className="inline h-4 w-4 mr-1" />打印抄表模板</button>
+        </div>
       </div>
     </div>
   );
