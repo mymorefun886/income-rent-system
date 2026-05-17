@@ -1194,7 +1194,8 @@ const RentRecordsPage = () => {
                   {Number(item.waterUsage||0)>0 && <div>水 {item.waterPrev}→{item.waterNow} ({item.waterUsage}方) ¥{Math.round(Number(item.waterUsage||0)*Number(item.waterPrice||0)+Number(item.waterMinimumCharge||0))}</div>}
                 </div>
               )}
-              {Number(item.otherFee||0)>0 && <div className="mt-1 text-[11px] text-slate-500">其他费 ¥{formatCurrency(item.otherFee||0)}</div>}
+              {Number(item.garbageFee||0)>0 && <div className="mt-1 text-[11px] text-slate-500">税费 ¥{formatCurrency(item.garbageFee||0)}</div>}
+              {Number(item.networkFee||0)>0 && <div className="mt-1 text-[11px] text-slate-500">宽带费 ¥{formatCurrency(item.networkFee||0)}</div>}
               <div className="mt-2 flex gap-1.5">
                 <button className="flex-1 rounded-lg border border-slate-200 py-1.5 text-xs" type="button" onClick={() => copyBillMessage(item)}>复制</button>
                 <button className="flex-1 rounded-lg border border-sky-200 py-1.5 text-xs" type="button" onClick={() => openEdit(item)}>编辑</button>
@@ -1242,7 +1243,8 @@ const RentRecordsPage = () => {
                   <td className="px-2 py-2 text-xs text-slate-600">
                     <div>租金 {formatCurrency(item.rentPart||0)}</div>
                     {(Number(item.waterMinimumCharge||0) > 0) && <div>保底 +{formatCurrency(item.waterMinimumCharge||0)}</div>}
-                    {(Number(item.otherFee||0) > 0) && <div>其他 {formatCurrency(item.otherFee||0)}</div>}
+                    {(Number(item.garbageFee||0) > 0) && <div>税费 {formatCurrency(item.garbageFee||0)}</div>}
+                    {(Number(item.networkFee||0) > 0) && <div>宽带费 {formatCurrency(item.networkFee||0)}</div>}
                     {(Number(item.depositAdjustment||0) !== 0) && <div>押金 {formatCurrency(item.depositAdjustment||0)}</div>}
                   </td>
                   <td className="px-2 py-2"><button className={`rounded px-2 py-1 text-xs cursor-pointer ${getStatusTone(item.status || "未收")}`} type="button" onClick={() => openQuickPay(item)} title="点击收款">{item.status || "未收"}</button></td>
