@@ -298,13 +298,16 @@ const RentRecordsPage = () => {
     return map;
   }, [records]);
 
+  const activeTenantKeys = useMemo(() => new Set((tenants||[]).filter(t=>!t.archived).map(t=>makeRoomKey(t.building,t.room))), [tenants]);
+
   const roomOptions = useMemo(() => {
     const fromTenants = (tenants || [])
       .map((t) => {
         const roomText = t.building ? `${t.building} ${t.room || ""}` : t.room || "";
-        return { key: makeRoomKey(t.building, t.room), roomText, tenantId: t.id, tenantName: t.name || "", rent: Number(t.rent || 0) };
+        const archived = Boolean(t.archived);
+        return { key: makeRoomKey(t.building, t.room), roomText, label: roomText + (archived ? " (已退租)" : ""), tenantId: t.id, tenantName: t.name || "", rent: Number(t.rent || 0), archived };
       });
-    // 从账单记录中补充退租/历史房号（不在当前租客列表中）
+    // 从账单记录中补充退租/历史房号（不在租客列表中）
     const seen = new Set(fromTenants.map((x) => x.key));
     const fromRecords = (records || [])
       .filter((r) => {
@@ -312,11 +315,19 @@ const RentRecordsPage = () => {
         const key = makeRoomKey(p.building, p.room);
         return key && !seen.has(key);
       })
-      .map((r) => {
+      .reduce((acc, r) => {
+        // 去重：每房号只保留一条
         const p = parseRoomText(r.room || "");
-        const roomText = p.building ? `${p.building} ${p.room}` : r.room || "";
-        return { key: makeRoomKey(p.building, p.room), roomText, tenantId: "", tenantName: (r.tenant || "已退租"), rent: 0 };
-      });
+        const key = makeRoomKey(p.building, p.room);
+        if (acc.find(x => x.key === key)) return acc;
+        acc.push({
+          key,
+          roomText: p.building ? `${p.building} ${p.room}` : r.room || "",
+          label: (p.building ? `${p.building} ${p.room}` : r.room || "") + " (已退租)",
+          tenantId: "", tenantName: r.tenant || "已退租", rent: 0, archived: true
+        });
+        return acc;
+      }, []);
     return [...fromTenants, ...fromRecords]
       .filter((x) => x.roomText)
       .sort((a, b) => a.roomText.localeCompare(b.roomText, "zh-Hans-CN", { numeric: true }));
@@ -1157,7 +1168,7 @@ const RentRecordsPage = () => {
           <h2 className="text-lg font-semibold">账单列表</h2>
           <select className="rounded-lg border border-slate-300 px-2 py-1 text-sm" value={roomFilter} onChange={(e) => setRoomFilter(e.target.value)}>
             <option value="all">全部房号</option>
-            {roomOptions.map((x) => <option key={x.key} value={x.key}>{x.roomText}</option>)}
+            {roomOptions.map((x) => <option key={x.key} value={x.key}>{x.label || x.roomText}</option>)}
           </select>
         </div>
         {loading ? <p className="mt-2 text-sm text-slate-500">加载中...</p> : null}
@@ -1213,7 +1224,7 @@ const RentRecordsPage = () => {
             <tbody>
               {sortedRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).map((item) => (
                 <tr key={item.id} className={`border-t border-sky-50 transition-colors duration-300 ${flashRowId === item.id ? "bg-emerald-50" : ""}`}>
-                  <td className="px-2 py-2 whitespace-nowrap">{item.room || "-"}</td>
+                  <td className="px-2 py-2 whitespace-nowrap">{item.room || "-"} {!activeTenantKeys.has(makeRoomKey((()=>{const p=parseRoomText(item.room||"");return p.building;})(), (()=>{const p=parseRoomText(item.room||"");return p.room;})())) && <span className="text-[10px] text-slate-400 bg-slate-100 rounded px-1">已退租</span>}</td>
                   <td className="px-2 py-2 whitespace-nowrap font-medium">{item.tenant || "-"}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{item.cycle || "-"}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{formatCurrency(item.receivable || 0)}</td>
@@ -1262,6 +1273,7 @@ const RentRecordsPage = () => {
             <h3 className="text-xl font-semibold">{editing ? "编辑账单" : "新增账单"}</h3>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="text-sm">房号
+                {(roomOptions.some(x => x.tenantId === form.tenantId) || roomOptions.some(x => normalizeKey(x.roomText) === normalizeKey(form.room))) ? (
                 <select
                   className="mt-1 w-full rounded border border-sky-200 px-2 py-2"
                   value={
@@ -1276,8 +1288,11 @@ const RentRecordsPage = () => {
                   }}
                 >
                   <option value="">选择房号</option>
-                  {roomOptions.map((x) => <option key={x.key} value={x.key}>{x.roomText}</option>)}
+                  {roomOptions.map((x) => <option key={x.key} value={x.key}>{x.label || x.roomText}</option>)}
                 </select>
+                ) : (
+                <input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2 text-sm text-slate-500" value={form.room + " (已退租)"} readOnly />
+                )}
               </label>
               <label className="text-sm">租客姓名<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.tenant} readOnly /></label>
               <label className="text-sm">周期<input type="month" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.cycle} onChange={(e) => setForm((p) => ({ ...p, cycle: e.target.value }))} /></label>
