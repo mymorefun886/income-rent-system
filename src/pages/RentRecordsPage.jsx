@@ -1045,7 +1045,6 @@ const RentRecordsPage = () => {
     <div className="space-y-6">
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <div className="flex items-center gap-3 mb-2"><div className="rounded-xl bg-rose-100 p-2.5 text-rose-700"><FileClock className="h-5 w-5" /></div><div><h1 className="text-2xl font-bold text-slate-900">收租账单</h1><p className="text-sm text-slate-500">应收 {formatCurrency(totals.receivable)}，已收 {formatCurrency(totals.received)}，未收 {formatCurrency(totals.unpaid)}</p></div></div>
-        <p className="mt-1 text-sm text-slate-500">应收 {formatCurrency(totals.receivable)}，已收 {formatCurrency(totals.received)}，未收 {formatCurrency(totals.unpaid)}</p>
         {error ? <p className="mt-2 text-sm text-amber-700">{error}</p> : null}
         {backendHint ? <p className="mt-2 text-sm text-amber-700">{backendHint}</p> : null}
         <div className="mt-3 flex flex-wrap gap-2">
