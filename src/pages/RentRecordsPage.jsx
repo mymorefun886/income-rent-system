@@ -1148,7 +1148,38 @@ const RentRecordsPage = () => {
         </div>
         {loading ? <p className="mt-2 text-sm text-slate-500">加载中...</p> : null}
         <div className="mt-2 text-xs text-slate-500">提示：列表为精简视图，完整字段请在"编辑"或"打印"查看。</div>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-sky-100">
+        {/* 手机端：卡片视图 */}
+        <div className="mt-3 grid gap-3 sm:hidden">
+          {sortedRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).map((item) => (
+            <div key={item.id} className={`rounded-xl border p-3 ${flashRowId === item.id ? "bg-emerald-50 border-emerald-300" : "bg-white border-slate-200"}`}>
+              <div className="flex items-center justify-between">
+                <div><span className="font-bold text-sm">{item.room||"-"}</span><span className="text-xs text-slate-400 ml-2">{item.cycle||"-"}</span></div>
+                <button className={`rounded-full px-2.5 py-1 text-xs font-bold ${getStatusTone(item.status||"未收")}`} type="button" onClick={() => openQuickPay(item)}>{item.status||"未收"}</button>
+              </div>
+              <div className="mt-1 text-xs text-slate-500">{item.tenant||"-"}</div>
+              <div className="mt-2 flex items-center justify-between">
+                <div><span className="text-xs text-slate-500">应收</span> <span className="font-bold text-sm">{formatCurrency(item.receivable||0)}</span></div>
+                <div><span className="text-xs text-slate-500">已收</span> <span className="font-bold text-sm">{formatCurrency(item.received||0)}</span></div>
+                <div className="text-xs text-slate-400">{formatDate((Array.isArray(item.payments)&&item.payments.length>0)?item.payments[item.payments.length-1].paidAt:(item.paidAt&&item.paidAt!=="-"?item.paidAt:""))||"-"}</div>
+              </div>
+              {(Number(item.electricUsage||0)>0||Number(item.waterUsage||0)>0) && (
+                <div className="mt-2 text-[11px] text-slate-500 bg-slate-50 rounded-lg p-2">
+                  {Number(item.electricUsage||0)>0 && <div>电 {item.electricPrev}→{item.electricNow} ({item.electricUsage}度) ¥{Math.round(Number(item.electricUsage||0)*Number(item.electricPrice||0))}</div>}
+                  {Number(item.waterUsage||0)>0 && <div>水 {item.waterPrev}→{item.waterNow} ({item.waterUsage}方) ¥{Math.round(Number(item.waterUsage||0)*Number(item.waterPrice||0)+Number(item.waterMinimumCharge||0))}</div>}
+                </div>
+              )}
+              {Number(item.otherFee||0)>0 && <div className="mt-1 text-[11px] text-slate-500">其他费 ¥{formatCurrency(item.otherFee||0)}</div>}
+              <div className="mt-2 flex gap-1.5">
+                <button className="flex-1 rounded-lg border border-slate-200 py-1.5 text-xs" type="button" onClick={() => copyBillMessage(item)}>复制</button>
+                <button className="flex-1 rounded-lg border border-sky-200 py-1.5 text-xs" type="button" onClick={() => openEdit(item)}>编辑</button>
+                <button className="flex-1 rounded-lg border border-rose-200 py-1.5 text-xs text-rose-600" type="button" onClick={() => removeRecord(item)}>删除</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* 桌面端：表格视图 */}
+        <div className="mt-3 overflow-x-auto rounded-xl border border-sky-100 hidden sm:block">
           <table className="min-w-[1240px] text-xs md:text-sm">
             <thead className="bg-slate-50 text-slate-700">
               <tr>
