@@ -1044,7 +1044,7 @@ const RentRecordsPage = () => {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <div className="flex items-center gap-3 mb-2"><div className="rounded-xl bg-rose-100 p-2.5 text-rose-700"><FileClock className="h-5 w-5" /></div><div><h1 className="text-2xl font-bold text-slate-900">收租账单</h1><p className="text-sm text-slate-500">应收 ¥{formatCurrency(totals.receivable)}，已收 ¥{formatCurrency(totals.received)}，未收 ¥{formatCurrency(totals.unpaid)}</p></div></div>
+        <div className="flex items-center gap-3 mb-2"><div className="rounded-xl bg-rose-100 p-2.5 text-rose-700"><FileClock className="h-5 w-5" /></div><div><h1 className="text-2xl font-bold text-slate-900">收租账单</h1><p className="text-sm text-slate-500">应收 {formatCurrency(totals.receivable)}，已收 {formatCurrency(totals.received)}，未收 {formatCurrency(totals.unpaid)}</p></div></div>
         <p className="mt-1 text-sm text-slate-500">应收 {formatCurrency(totals.receivable)}，已收 {formatCurrency(totals.received)}，未收 {formatCurrency(totals.unpaid)}</p>
         {error ? <p className="mt-2 text-sm text-amber-700">{error}</p> : null}
         {backendHint ? <p className="mt-2 text-sm text-amber-700">{backendHint}</p> : null}
@@ -1120,8 +1120,8 @@ const RentRecordsPage = () => {
                   {Number(item.waterUsage||0)>0 && <div>水 {item.waterPrev}→{item.waterNow} ({item.waterUsage}方) ¥{Math.round(Number(item.waterUsage||0)*Number(item.waterPrice||0)+Number(item.waterMinimumCharge||0))}</div>}
                 </div>
               )}
-              {Number(item.garbageFee||0)>0 && <div className="mt-1 text-[11px] text-slate-500">税费 ¥{formatCurrency(item.garbageFee||0)}</div>}
-              {Number(item.networkFee||0)>0 && <div className="mt-1 text-[11px] text-slate-500">宽带费 ¥{formatCurrency(item.networkFee||0)}</div>}
+              {Number(item.garbageFee||0)>0 && <div className="mt-1 text-[11px] text-slate-500">税费 {formatCurrency(item.garbageFee||0)}</div>}
+              {Number(item.networkFee||0)>0 && <div className="mt-1 text-[11px] text-slate-500">宽带费 {formatCurrency(item.networkFee||0)}</div>}
               <div className="mt-2 flex gap-1.5">
                 <button className="flex-1 rounded-lg border border-slate-200 py-1.5 text-xs" type="button" onClick={() => copyBillMessage(item)}>复制</button>
                 <button className="flex-1 rounded-lg border border-sky-200 py-1.5 text-xs" type="button" onClick={() => openEdit(item)}>编辑</button>
