@@ -2069,9 +2069,15 @@ const server = http.createServer(async (request, response) => {
       if (!p || String(r.cycle || "") > String(p.cycle || "")) lastMap.set(key, { e: r.electricNow || "", w: r.waterNow || "" });
     });
     const rooms = db.properties
-      .filter((p) => usageMap.get((p.building || "") + "::" + p.room) !== "自用（不出租）")
       .sort((a, b) => { const bc = String(a.building || "").localeCompare(String(b.building || ""), "zh-Hans-CN"); if (bc) return bc; const na = parseInt(String(a.room || "").match(/d+/) || "0"); const nb = parseInt(String(b.room || "").match(/d+/) || "0"); return na - nb || String(a.room || "").localeCompare(String(b.room || "")); })
-      .map((p) => { const last = lastMap.get((p.building || "") + "::" + p.room) || {}; return { b: p.building, r: p.room, ep: last.e || "", wp: last.w || "" }; });
+      .map((p) => {
+        const isSelf = usageMap.get((p.building || "") + "::" + p.room) === "自用（不出租）";
+        const last = lastMap.get((p.building || "") + "::" + p.room) || {};
+        // 优先用账单读数，否则用房产档案的 lastReading
+        const ep = last.e || (isSelf ? (p.lastElectricReading || "") : "") || "";
+        const wp = last.w || (isSelf ? (p.lastWaterReading || "") : "") || "";
+        return { b: p.building, r: p.room, ep, wp, self: isSelf };
+      });
     return sendJson(response, 200, ok(rooms));
   }
 

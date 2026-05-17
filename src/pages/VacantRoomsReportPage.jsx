@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { BarChart3, Home, Table2 } from "lucide-react";
-import { apiEnabled, fetchProperties, fetchTenants } from "../lib/api";
+import { apiEnabled, fetchExpenses, fetchProperties, fetchRecords, fetchTenants } from "../lib/api";
 import { properties as fallbackProperties, tenants as fallbackTenants } from "../lib/mock-data";
 
 function normalizeRoomKey(v) {
@@ -98,6 +98,9 @@ export default function VacantRoomsReportPage() {
   const [tab, setTab] = useState("vacant");
   const [properties, setProperties] = useState(fallbackProperties);
   const [tenants, setTenants] = useState(fallbackTenants);
+  const [records, setRecords] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [utilCycle, setUtilCycle] = useState(new Date().toISOString().slice(0,7));
   const [loading, setLoading] = useState(apiEnabled);
   const [error, setError] = useState("");
   const [year, setYear] = useState(new Date().getFullYear());
@@ -112,10 +115,12 @@ export default function VacantRoomsReportPage() {
         return;
       }
       try {
-        const [p, t] = await Promise.all([fetchProperties(), fetchTenants()]);
+        const [p, t, r, e] = await Promise.all([fetchProperties(), fetchTenants(), fetchRecords(), fetchExpenses()]);
         if (!cancelled) {
           setProperties(Array.isArray(p) ? p : []);
           setTenants(Array.isArray(t) ? t : []);
+          setRecords(Array.isArray(r) ? r : []);
+          setExpenses(Array.isArray(e) ? e : []);
           setError("");
         }
       } catch (e) {
@@ -251,6 +256,13 @@ export default function VacantRoomsReportPage() {
             type="button"
           >
             空置率
+          </button>
+          <button
+            className={`rounded-xl px-4 py-2 text-sm ${tab === "utility" ? "bg-[#0077b6] text-white" : "bg-[#f3fcff] text-slate-700"}`}
+            onClick={() => setTab("utility")}
+            type="button"
+          >
+            水电对账
           </button>
         </div>
 
@@ -403,6 +415,73 @@ export default function VacantRoomsReportPage() {
             </div>
           </div>
         )}
+
+        {tab === "utility" ? (() => {
+          // 水电对账计算
+          const buildGroups = (cycle) => {
+            const [y, m] = (cycle || "").split("-").map(Number);
+            if (!y || !m) return [];
+            const billCycle = `${y}-${String(m+1).padStart(2,"0")}`; // 用量月+1=出账月
+            const recs = records.filter(r => String(r.cycle||"").trim() === cycle);
+            const exps = expenses.filter(e => String(e.period||"").trim() === billCycle);
+            const groups = new Map();
+            recs.forEach(r => {
+              const bld = r.building || (String(r.room||"").includes(" ") ? String(r.room||"").split(" ")[0] : "");
+              if (!bld) return;
+              if (!groups.has(bld)) groups.set(bld, { building: bld, elecUsage: 0, waterUsage: 0, elecIncome: 0, waterIncome: 0, elecBill: 0, waterBill: 0 });
+              const g = groups.get(bld);
+              g.elecUsage += Number(r.electricUsage||0);
+              g.waterUsage += Number(r.waterUsage||0);
+              g.elecIncome += Math.round(Number(r.electricUsage||0) * Number(r.electricPrice||0));
+              g.waterIncome += Math.round((Number(r.waterUsage||0) * Number(r.waterPrice||0) + Number(r.waterMinimumCharge||0)) * 100) / 100;
+            });
+            exps.forEach(e => {
+              const bld = String(e.propertyLabel||"").replace("（整栋）","").trim();
+              if (!bld) return;
+              if (!groups.has(bld)) groups.set(bld, { building: bld, elecUsage: 0, waterUsage: 0, elecIncome: 0, waterIncome: 0, elecBill: 0, waterBill: 0 });
+              const g = groups.get(bld);
+              if (String(e.category||"").includes("电")) g.elecBill += Number(e.amount||0);
+              if (String(e.category||"").includes("水")) g.waterBill += Number(e.amount||0);
+            });
+            return Array.from(groups.values());
+          };
+          const utilGroups = buildGroups(utilCycle);
+          return (
+            <div className="mt-4">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-sm">用量月份</span>
+                <input className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm" type="month" value={utilCycle} onChange={e => setUtilCycle(e.target.value)} />
+                <span className="text-xs text-slate-500">（账单在次月支出台账录入）</span>
+              </div>
+              {utilGroups.map(g => (
+                <div key={g.building} className="mb-4 rounded-2xl bg-[#f8fdff] p-4 ring-1 ring-[#d8f1f8]">
+                  <div className="font-semibold text-slate-900 mb-3">{g.building}</div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <div className="text-xs text-slate-500 mb-2">⚡ 电费</div>
+                      <div className="rounded-xl bg-white p-3 space-y-1 text-sm">
+                        <div className="flex justify-between"><span>用量合计</span><span className="font-semibold">{g.elecUsage} 度</span></div>
+                        <div className="flex justify-between"><span>向租客收取</span><span className="text-emerald-700">¥{g.elecIncome.toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span>实际电费账单</span><span className="text-rose-700">¥{g.elecBill.toFixed(2)}</span></div>
+                        <div className="flex justify-between border-t pt-1"><span className="font-semibold">差额</span><span className={`font-bold ${g.elecIncome - g.elecBill >= -1 ? "text-emerald-700" : "text-rose-700"}`}>{g.elecBill > 0 ? "¥" + (g.elecIncome - g.elecBill).toFixed(2) : "未录入账单"}</span></div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-2">💧 水费</div>
+                      <div className="rounded-xl bg-white p-3 space-y-1 text-sm">
+                        <div className="flex justify-between"><span>用量合计</span><span className="font-semibold">{g.waterUsage} 方</span></div>
+                        <div className="flex justify-between"><span>向租客收取</span><span className="text-emerald-700">¥{g.waterIncome.toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span>实际水费账单</span><span className="text-rose-700">¥{g.waterBill.toFixed(2)}</span></div>
+                        <div className="flex justify-between border-t pt-1"><span className="font-semibold">差额</span><span className={`font-bold ${g.waterIncome - g.waterBill >= -1 ? "text-emerald-700" : "text-rose-700"}`}>{g.waterBill > 0 ? "¥" + (g.waterIncome - g.waterBill).toFixed(2) : "未录入账单"}</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {!utilGroups.length && <div className="text-sm text-slate-500 text-center py-8">该月份暂无账单数据，或支出台账未录入对应水电费</div>}
+            </div>
+          );
+        })() : null}
       </section>
     </div>
   );
