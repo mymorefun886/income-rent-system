@@ -299,14 +299,28 @@ const RentRecordsPage = () => {
   }, [records]);
 
   const roomOptions = useMemo(() => {
-    return (tenants || [])
+    const fromTenants = (tenants || [])
       .map((t) => {
         const roomText = t.building ? `${t.building} ${t.room || ""}` : t.room || "";
         return { key: makeRoomKey(t.building, t.room), roomText, tenantId: t.id, tenantName: t.name || "", rent: Number(t.rent || 0) };
+      });
+    // 从账单记录中补充退租/历史房号（不在当前租客列表中）
+    const seen = new Set(fromTenants.map((x) => x.key));
+    const fromRecords = (records || [])
+      .filter((r) => {
+        const p = parseRoomText(r.room || "");
+        const key = makeRoomKey(p.building, p.room);
+        return key && !seen.has(key);
       })
+      .map((r) => {
+        const p = parseRoomText(r.room || "");
+        const roomText = p.building ? `${p.building} ${p.room}` : r.room || "";
+        return { key: makeRoomKey(p.building, p.room), roomText, tenantId: "", tenantName: (r.tenant || "已退租"), rent: 0 };
+      });
+    return [...fromTenants, ...fromRecords]
       .filter((x) => x.roomText)
       .sort((a, b) => a.roomText.localeCompare(b.roomText, "zh-Hans-CN", { numeric: true }));
-  }, [tenants]);
+  }, [tenants, records]);
 
   async function handleSheetImage(file) {
     if (!file) return;
