@@ -1,0 +1,145 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 214 100% 98%;
+    --foreground: 222 47% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 14%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 213 100% 96%;
+    --secondary-foreground: 222 47% 14%;
+    --muted: 214 70% 96%;
+    --muted-foreground: 215 17% 45%;
+    --accent: 209 100% 95%;
+    --accent-foreground: 222 47% 14%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 89%;
+    --input: 214 32% 89%;
+    --ring: 221 83% 53%;
+    --radius: 0.9rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-image: linear-gradient(180deg, rgba(239, 246, 255, 0.85), rgba(248, 250, 252, 0.95));
+    font-family: "SF Pro Text", "SF Pro Display", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    font-weight: 400;
+  }
+
+  h1 {
+    font-size: clamp(1.55rem, 1.6vw + 1.15rem, 2.1rem);
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+    font-weight: 700;
+  }
+
+  h2 {
+    font-size: clamp(1.2rem, 1vw + 0.95rem, 1.55rem);
+    line-height: 1.32;
+    letter-spacing: -0.01em;
+    font-weight: 650;
+  }
+
+  h3 {
+    font-size: 1.05rem;
+    line-height: 1.38;
+    font-weight: 600;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    line-height: 1.2;
+  }
+
+  input,
+  select {
+    min-height: 2.4rem;
+  }
+
+  textarea {
+    min-height: 5.2rem;
+  }
+
+  th,
+  td {
+    vertical-align: middle;
+  }
+}
+
+@layer components {
+  .ui-btn {
+    @apply inline-flex items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium leading-5;
+  }
+
+  .ui-btn-primary {
+    @apply ui-btn border-transparent bg-sky-700 text-white hover:bg-sky-800;
+  }
+
+  .ui-btn-secondary {
+    @apply ui-btn border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  }
+
+  .ui-btn-danger {
+    @apply ui-btn border-rose-300 bg-white text-rose-700 hover:bg-rose-50;
+  }
+
+  .ui-btn-warn {
+    @apply ui-btn border-amber-300 bg-white text-amber-700 hover:bg-amber-50;
+  }
+
+  .ui-input {
+    @apply h-10 rounded-lg border px-3 text-sm leading-5;
+  }
+
+  .ui-select {
+    @apply h-10 rounded-lg border px-3 text-sm leading-5;
+  }
+
+  .ui-table th {
+    @apply px-3 py-2.5 text-sm font-semibold;
+  }
+
+  .ui-table td {
+    @apply px-3 py-2.5 text-sm;
+  }
+
+  .ui-ellipsis {
+    @apply overflow-hidden text-ellipsis whitespace-nowrap;
+  }
+
+  .ui-col-room {
+    min-width: 140px;
+  }
+
+  .ui-col-name {
+    min-width: 120px;
+  }
+
+  .ui-col-date {
+    min-width: 130px;
+  }
+}

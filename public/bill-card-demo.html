@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>账单卡片预览</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#e2e8f0;padding:20px;font-family:'Microsoft YaHei',sans-serif;display:flex;flex-wrap:wrap;gap:16px;justify-content:center}
+.card{width:360px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1)}
+.card-header{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;padding:16px 20px}
+.card-header .title{font-size:13px;opacity:.8}
+.card-header .room{font-size:22px;font-weight:bold;margin-top:2px}
+.card-header .cycle{font-size:12px;opacity:.7;margin-top:2px}
+.card-body{padding:16px 20px}
+.row{display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-bottom:1px solid #f1f5f9}
+.row .label{color:#64748b}
+.row .val{font-weight:500}
+.meter{border-left:3px solid #e2e8f0;padding-left:12px;margin:8px 0}
+.meter .m-row{display:flex;gap:12px;font-size:13px;color:#475569;padding:2px 0}
+.meter .m-amount{font-weight:bold;color:#1e293b}
+.total{background:#f0fdf4;border-radius:10px;padding:12px;margin-top:10px;text-align:center}
+.total .amount{font-size:28px;font-weight:bold;color:#16a34a}
+.total .label{font-size:12px;color:#64748b}
+.card-footer{background:#f8fafc;padding:10px 20px;text-align:center;font-size:11px;color:#94a3b8}
+</style>
+</head>
+<body>
+
+<!-- 租客1：有水電的 -->
+<div class="card">
+  <div class="card-header">
+    <div class="title">收租账单 · 2026年6月</div>
+    <div class="room">西山东区17号 101 · 游和君</div>
+  </div>
+  <div class="card-body">
+    <div class="meter">
+      <div class="m-row"><span>⚡ 电表</span><span>6908 → 6980 (72度)</span><span class="m-amount">¥58</span></div>
+      <div class="m-row"><span>💧 水表</span><span>266 → 270 (4方)</span><span class="m-amount">¥22</span></div>
+    </div>
+    <div class="row"><span class="label">租金</span><span class="val">¥900</span></div>
+    <div class="row"><span class="label">水电费</span><span class="val">¥80</span></div>
+    <div class="total"><div class="label">本期应收</div><div class="amount">¥980</div></div>
+    <div style="margin-top:8px;font-size:12px;color:#64748b;text-align:center;">到期日：2026-06-10 · 微信/支付宝</div>
+  </div>
+  <div class="card-footer">收租佬系统 · income.ccwu.cc</div>
+</div>
+
+<!-- 租客2：工场，无水表 -->
+<div class="card">
+  <div class="card-header" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)">
+    <div class="title">收租账单 · 2026年6月</div>
+    <div class="room">西山东区17号 工场 · 林锦彬</div>
+  </div>
+  <div class="card-body">
+    <div class="row"><span class="label">租金</span><span class="val">¥1,300</span></div>
+    <div class="row"><span class="label">税费</span><span class="val">¥30</span></div>
+    <div class="total"><div class="label">本期应收</div><div class="amount">¥1,330</div></div>
+    <div style="margin-top:8px;font-size:12px;color:#64748b;text-align:center;">到期日：2026-06-10 · 微信/支付宝</div>
+  </div>
+  <div class="card-footer">收租佬系统 · income.ccwu.cc</div>
+</div>
+
+<!-- 租客3：無读数 -->
+<div class="card">
+  <div class="card-header" style="background:linear-gradient(135deg,#059669,#047857)">
+    <div class="title">收租账单 · 2026年6月</div>
+    <div class="room">西山东区30号A 304 · 刘武叶</div>
+  </div>
+  <div class="card-body">
+    <div class="row"><span class="label">租金</span><span class="val">¥390</span></div>
+    <div class="total"><div class="label">本期应收</div><div class="amount">¥390</div></div>
+    <div style="margin-top:8px;font-size:12px;color:#64748b;text-align:center;">到期日：2026-06-10 · 微信/支付宝</div>
+  </div>
+  <div class="card-footer">收租佬系统 · income.ccwu.cc</div>
+</div>
+
+</body>
+</html>
