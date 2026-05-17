@@ -2054,11 +2054,15 @@ const server = http.createServer(async (request, response) => {
       if (!bld && dashIdx >= 0) { bld = roomText.slice(0, dashIdx).trim(); rm = rm || roomText.slice(dashIdx + 3).trim(); }
       else if (!bld && spaceIdx >= 0) { bld = roomText.slice(0, spaceIdx).trim(); rm = rm || roomText.slice(spaceIdx + 1).trim(); }
       else if (!rm) { rm = roomText; }
-      // 如果 roomNo 存了完整地址（如 "西山东区17号 101"），从中提取楼栋
+      // 如果 rm 存了完整地址（如 "西山东区17号 101"），从中提取楼栋
       if (!bld && rm.includes(" ")) {
         const rmSpace = rm.lastIndexOf(" ");
         bld = rm.slice(0, rmSpace).trim();
         rm = rm.slice(rmSpace + 1).trim();
+      }
+      // 如果 rm 还是完整地址（从 roomNo 继承），强制拆分
+      if (bld && rm.includes(" ") && rm.indexOf(bld) === 0) {
+        rm = rm.slice(bld.length).trim();
       }
       const key = (bld || "") + "::" + (rm || "");
       const p = lastMap.get(key);
