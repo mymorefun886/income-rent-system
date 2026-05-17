@@ -22,12 +22,14 @@ body{font:14px "Microsoft YaHei",sans-serif;background:#f0f4f8;color:#1e293b;pad
 .btn-save{background:#2563eb;color:#fff}
 .btn-export{background:#10b981;color:#fff}
 .btn-clear{background:#f1f5f9;color:#64748b}
+.status{font-size:11px;color:#64748b;text-align:center;padding:4px}.status.ok{color:#16a34a}.status.err{color:#ef4444}
 .toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:99;opacity:0;transition:opacity .3s}
 .toast.show{opacity:1}
 </style>
 </head>
 <body>
-<div class="h"><h1>抄表录入</h1><div>离线可用 · 数据存手机 · 回家导出 CSV</div></div>
+<div class="h"><h1>抄表录入</h1><div>打开即同步最新数据 · 离线可用 · 导出CSV</div></div>
+<div id="statusBar" class="status">正在加载最新数据...</div>
 <div id="app"></div>
 <div class="btns">
   <button class="btn-clear" onclick="clearAll()">清空</button>
@@ -36,14 +38,13 @@ body{font:14px "Microsoft YaHei",sans-serif;background:#f0f4f8;color:#1e293b;pad
 </div>
 <div class="toast" id="toast"></div>
 <script>
-var ROOMS = [{"b":"西山东区17号","r":"工场","ep":50631,"wp":""},{"b":"西山东区17号","r":"101","ep":6744,"wp":261},{"b":"西山东区17号","r":"102","ep":7292,"wp":165},{"b":"西山东区17号","r":"201","ep":5254,"wp":559},{"b":"西山东区17号","r":"202","ep":9617,"wp":939},{"b":"西山东区17号","r":"203","ep":6538,"wp":230},{"b":"西山东区17号","r":"301","ep":6584,"wp":414},{"b":"西山东区17号","r":"302","ep":3600,"wp":1110},{"b":"西山东区17号","r":"303","ep":11067,"wp":482},{"b":"西山东区30号A","r":"101","ep":650,"wp":164},{"b":"西山东区30号A","r":"102","ep":579,"wp":91},{"b":"西山东区30号A","r":"103","ep":2027,"wp":211},{"b":"西山东区30号A","r":"104","ep":"","wp":""},{"b":"西山东区30号A","r":"105","ep":146,"wp":361},{"b":"西山东区30号A","r":"106","ep":492,"wp":414},{"b":"西山东区30号A","r":"107","ep":569,"wp":358},{"b":"西山东区30号A","r":"201","ep":9,"wp":153},{"b":"西山东区30号A","r":"202","ep":75,"wp":98},{"b":"西山东区30号A","r":"203","ep":304,"wp":73},{"b":"西山东区30号A","r":"204","ep":128,"wp":98},{"b":"西山东区30号A","r":"205","ep":454,"wp":118},{"b":"西山东区30号A","r":"206","ep":682,"wp":25},{"b":"西山东区30号A","r":"207","ep":912,"wp":89},{"b":"西山东区30号A","r":"301","ep":"","wp":""},{"b":"西山东区30号A","r":"302","ep":"","wp":""},{"b":"西山东区30号A","r":"303","ep":1111,"wp":168},{"b":"西山东区30号A","r":"304","ep":194,"wp":102},{"b":"西山东区30号A","r":"305","ep":"","wp":""},{"b":"西山东区30号A","r":"306","ep":650,"wp":228},{"b":"西山东区30号A","r":"307","ep":305,"wp":192},{"b":"西山东区30号A","r":"401","ep":"","wp":""},{"b":"西山东区30号A","r":"402","ep":272,"wp":148},{"b":"西山东区30号A","r":"403","ep":677,"wp":281},{"b":"西山东区30号A","r":"404","ep":443,"wp":150},{"b":"西山东区30号A","r":"405","ep":7,"wp":156},{"b":"西山东区30号A","r":"406","ep":904,"wp":228},{"b":"西山东区30号A","r":"407","ep":1000,"wp":209},{"b":"西山东区30号A","r":"501","ep":"","wp":""},{"b":"西山东区30号A","r":"503","ep":"","wp":""},{"b":"西山东区30号A","r":"504","ep":331,"wp":78},{"b":"西山东区30号A","r":"505","ep":655,"wp":77},{"b":"西山东区30号A","r":"506","ep":467,"wp":305},{"b":"西山东区30号A","r":"507","ep":245,"wp":146}];
+var ROOMS = [];
 var CYCLE = new Date().toISOString().slice(0,7);
 var STORAGE_KEY = "meter_" + CYCLE;
 
 function showToast(msg) {
   var t = document.getElementById("toast");
-  t.textContent = msg;
-  t.classList.add("show");
+  t.textContent = msg; t.classList.add("show");
   setTimeout(function(){ t.classList.remove("show"); }, 1500);
 }
 
@@ -71,17 +72,17 @@ function exportData() {
     var v = data[r.b + "::" + r.r] || ["", ""];
     if (v[0] || v[1]) lines.push(r.b + "," + r.r + "," + v[0] + "," + v[1]);
   });
-  var csv = "\uFEFF" + lines.join("\n");
+  var csv = "﻿" + lines.join("\n");
   var blob = new Blob([csv], {type: "text/csv"});
   var a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "meter_" + CYCLE + ".csv";
   a.click();
-  showToast("已导出 " + (lines.length - 1) + " 条到 CSV 文件");
+  showToast("已导出 " + (lines.length - 1) + " 条到 CSV");
 }
 
 function clearAll() {
-  if (confirm("确定清空本次抄表数据？")) {
+  if (confirm("确定清空？")) {
     localStorage.removeItem(STORAGE_KEY);
     render();
     showToast("已清空");
@@ -105,16 +106,53 @@ function render() {
       h += '<div class="row" data-rid="' + r.b + '::' + r.r + '">';
       h += '<div class="room">' + r.r + '</div>';
       h += '<div class="inp"><label>电(度)</label><input class="e" type="number" step="1" inputmode="numeric" value="' + v[0] + '"></div>';
-      h += '<div class="prev">' + (r.ep ? '上' + r.ep : '') + '</div>';
+      h += '<div class="prev">' + (r.ep ? "上" + r.ep : "") + '</div>';
       h += '<div class="inp"><label>水(方)</label><input class="w" type="number" step="0.1" inputmode="decimal" value="' + v[1] + '"></div>';
-      h += '<div class="prev">' + (r.wp ? '上' + r.wp : '') + '</div>';
+      h += '<div class="prev">' + (r.wp ? "上" + r.wp : "") + '</div>';
       h += '</div>';
     });
   });
   document.getElementById("app").innerHTML = h;
 }
 
-render();
+// 尝试从API获取最新数据
+function getApiBase() {
+  var h = window.location.hostname;
+  if (h === "localhost" || h === "127.0.0.1") return "http://127.0.0.1:8788";
+  return "https://api." + window.location.hostname;
+}
+
+async function fetchLatest() {
+  try {
+    var resp = await fetch(getApiBase() + "/api/meter-data");
+    if (resp.ok) {
+      ROOMS = await resp.json().then(function(d) { return d.data || []; });
+      document.getElementById("statusBar").textContent = "已同步 " + ROOMS.length + " 间房 · 最新上期读数";
+      document.getElementById("statusBar").className = "status ok";
+      render();
+      return;
+    }
+  } catch(e) {}
+  // API不可用，尝试本地缓存
+  var cached = localStorage.getItem("meter_rooms");
+  if (cached) {
+    try { ROOMS = JSON.parse(cached); } catch(e) {}
+  }
+  document.getElementById("statusBar").textContent = ROOMS.length ? "离线模式 · " + ROOMS.length + " 间房" : "无法加载数据，请检查网络";
+  document.getElementById("statusBar").className = ROOMS.length ? "status" : "status err";
+  render();
+}
+
+// 加载后缓存房间列表供离线用
+function cacheRooms() {
+  if (ROOMS.length) localStorage.setItem("meter_rooms", JSON.stringify(ROOMS));
+}
+
+// 启动
+(async function() {
+  await fetchLatest();
+  cacheRooms();
+})();
 </script>
 </body>
 </html>
