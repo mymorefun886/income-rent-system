@@ -1,5 +1,5 @@
 import React from "react";
-import { BarChart3, BookOpenText, Building2, CalendarDays, ClipboardSignature, FileClock, LayoutDashboard, LogOut, Search, Settings, Users, Wallet, Wrench, X } from "lucide-react";
+import { BarChart3, BookOpenText, Building2, CalendarDays, ClipboardSignature, Droplets, FileClock, LayoutDashboard, LogOut, Search, Settings, Users, Wallet, Wrench, X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 const menuItems = [
@@ -8,6 +8,7 @@ const menuItems = [
   { path: "/tenants", label: "租客档案", description: "证件、租约、同住人与备注", icon: Users },
   { path: "/contracts", label: "合同管理", description: "租约、续租、附件与到期提醒", icon: ClipboardSignature },
   { path: "/records", label: "收租台账", description: "已收、待收、逾期与方式", icon: FileClock },
+  { path: "/meter-input", label: "水电抄表", description: "手机录读数 · 一键同步", icon: Droplets },
   { path: "/monthly-rent", label: "月度收租", description: "生成、核对、收款与发送", icon: CalendarDays },
   { path: "/expenses", label: "支出台账", description: "水电、物业、税费与维修", icon: Wallet },
   { path: "/work-orders", label: "维修工单", description: "报修、处理、照片与费用联动", icon: Wrench },

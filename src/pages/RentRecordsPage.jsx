@@ -1059,12 +1059,10 @@ const RentRecordsPage = () => {
         <p className="mt-1 text-xs text-slate-500">手机抄表 → 导出 CSV → 导入生成账单</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" type="month" value={sheetCycle} onChange={(e) => setSheetCycle(e.target.value)} title="导入目标账期" />
-          <button className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 text-sm text-emerald-700" type="button" onClick={printMeterTemplate}>🖨 打印抄表模板</button>
           <label className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 text-sm text-emerald-700 cursor-pointer">
             📥 导入手机抄表CSV
             <input className="hidden" type="file" accept=".csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMeterCsvImport(f); e.target.value = ''; }} />
           </label>
-          <button className="inline-flex items-center gap-2 rounded-xl border border-violet-200 px-3 py-2 text-sm text-violet-700" type="button" onClick={downloadMeterHtml}>📱 下载手机抄表页</button>
           <button className="inline-flex items-center gap-2 rounded-xl border border-pink-200 px-3 py-2 text-sm text-pink-700" type="button" onClick={generateBillImages} disabled={generatingImages}><Image className="h-4 w-4" />{generatingImages ? "生成中..." : "生成账单图片"}</button>
         </div>
         <details className="mt-3">
