@@ -15,8 +15,8 @@ const dbPath = path.join(storageDir, "db.json");
 
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 8788);
-const username = process.env.ADMIN_USERNAME || "19020967028";
-const password = process.env.ADMIN_PASSWORD || "M848886#";
+const username = process.env.ADMIN_USERNAME || "morefun886";
+const password = process.env.ADMIN_PASSWORD || "Mf848886#";
 const appOrigin = process.env.APP_ORIGIN || "";
 const apiAllowedOrigins = String(process.env.API_ALLOWED_ORIGINS || appOrigin || (process.env.NODE_ENV === "development" ? "http://localhost:8080" : ""))
   .split(",")
@@ -2038,6 +2038,22 @@ const server = http.createServer(async (request, response) => {
     });
   });
 
+  // 公开抄表数据接口 v2（无需认证，给手机抄表页用，2026-05-17 updated）
+  if (request.method === "GET" && pathname === "/api/meter-data") {
+    const usageMap = new Map(db.properties.map((p) => [(p.building || "") + "::" + p.room, String(p.usageType || "")]));
+    const lastMap = new Map();
+    db.records.forEach((r) => {
+      const key = (r.building || "") + "::" + (r.roomNo || r.room || "");
+      const p = lastMap.get(key);
+      if (!p || String(r.cycle || "") > String(p.cycle || "")) lastMap.set(key, { e: r.electricNow || "", w: r.waterNow || "" });
+    });
+    const rooms = db.properties
+      .filter((p) => usageMap.get((p.building || "") + "::" + p.room) !== "自用（不出租）")
+      .sort((a, b) => { const bc = String(a.building || "").localeCompare(String(b.building || ""), "zh-Hans-CN"); if (bc) return bc; const na = parseInt(String(a.room || "").match(/d+/) || "0"); const nb = parseInt(String(b.room || "").match(/d+/) || "0"); return na - nb || String(a.room || "").localeCompare(String(b.room || "")); })
+      .map((p) => { const last = lastMap.get((p.building || "") + "::" + p.room) || {}; return { b: p.building, r: p.room, ep: last.e || "", wp: last.w || "" }; });
+    return sendJson(response, 200, ok(rooms));
+  }
+
   if (request.method === "GET" && pathname === "/api/health") {
     return sendJson(
       response,
@@ -2097,7 +2113,7 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
-  if (pathname.startsWith("/api/") && pathname !== "/api/health" && pathname !== "/api/auth/login") {
+  if (pathname.startsWith("/api/") && pathname !== "/api/health" && pathname !== "/api/auth/login" && pathname !== "/api/meter-data") {
     if (!isAuthed(request)) return sendJson(response, 401, { success: false, message: "未登录或登录已过期" });
     if (request.method !== "GET" && pathname !== "/api/security/role-switch" && isReadOnlyRole(db.user?.role || "")) {
       return sendJson(response, 403, { success: false, message: "当前账号为只读权限，禁止修改数据" });

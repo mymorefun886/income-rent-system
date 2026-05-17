@@ -125,20 +125,20 @@ function getApiBase() {
 async function fetchLatest() {
   try {
     var resp = await fetch(getApiBase() + "/api/meter-data");
-    if (resp.ok) {
-      ROOMS = await resp.json().then(function(d) { return d.data || []; });
-      document.getElementById("statusBar").textContent = "已同步 " + ROOMS.length + " 间房 · 最新上期读数";
+    var data = await resp.json();
+    if (resp.ok && data.success) {
+      ROOMS = data.data || [];
+      document.getElementById("statusBar").textContent = "✅ 已同步最新读数 · " + ROOMS.length + " 间房";
       document.getElementById("statusBar").className = "status ok";
       render();
       return;
     }
   } catch(e) {}
-  // API不可用，尝试本地缓存
+  // API不可用或无权限 → 用本地缓存 / 内嵌数据
   var cached = localStorage.getItem("meter_rooms");
-  if (cached) {
-    try { ROOMS = JSON.parse(cached); } catch(e) {}
-  }
-  document.getElementById("statusBar").textContent = ROOMS.length ? "离线模式 · " + ROOMS.length + " 间房" : "无法加载数据，请检查网络";
+  if (cached) { try { ROOMS = JSON.parse(cached); } catch(e) {} }
+  var msg = ROOMS.length ? "📱 手机缓存数据 · " + ROOMS.length + " 间（点「下载手机抄表页」可更新）" : "⚠️ 暂无数据，请在系统里点「📱 下载手机抄表页」获取最新";
+  document.getElementById("statusBar").textContent = msg;
   document.getElementById("statusBar").className = ROOMS.length ? "status" : "status err";
   render();
 }
