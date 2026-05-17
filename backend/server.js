@@ -2038,12 +2038,29 @@ const server = http.createServer(async (request, response) => {
     });
   });
 
-  // 公开抄表数据接口 v2（无需认证，给手机抄表页用，2026-05-17 updated）
+  // 公开抄表数据接口（无需认证，给手机抄表页用）
   if (request.method === "GET" && pathname === "/api/meter-data") {
     const usageMap = new Map(db.properties.map((p) => [(p.building || "") + "::" + p.room, String(p.usageType || "")]));
     const lastMap = new Map();
     db.records.forEach((r) => {
-      const key = (r.building || "") + "::" + (r.roomNo || r.room || "");
+      // 从 room 字段解析楼栋和房号，兼容 "西山东区17号 101" 和 "西山东区17号 - 101"
+      // 优先用 building/roomNo，否则从 room 字段解析，再否则从 roomNo 字段解析（部分记录 roomNo 存了完整地址）
+      const roomText = String(r.room || "");
+      const dashIdx = roomText.indexOf(" - ");
+      const spaceIdx = roomText.lastIndexOf(" ");
+      let bld = String(r.building || "").trim();
+      let rm = String(r.roomNo || "").trim();
+      // 从 room 字段补充
+      if (!bld && dashIdx >= 0) { bld = roomText.slice(0, dashIdx).trim(); rm = rm || roomText.slice(dashIdx + 3).trim(); }
+      else if (!bld && spaceIdx >= 0) { bld = roomText.slice(0, spaceIdx).trim(); rm = rm || roomText.slice(spaceIdx + 1).trim(); }
+      else if (!rm) { rm = roomText; }
+      // 如果 roomNo 存了完整地址（如 "西山东区17号 101"），从中提取楼栋
+      if (!bld && rm.includes(" ")) {
+        const rmSpace = rm.lastIndexOf(" ");
+        bld = rm.slice(0, rmSpace).trim();
+        rm = rm.slice(rmSpace + 1).trim();
+      }
+      const key = (bld || "") + "::" + (rm || "");
       const p = lastMap.get(key);
       if (!p || String(r.cycle || "") > String(p.cycle || "")) lastMap.set(key, { e: r.electricNow || "", w: r.waterNow || "" });
     });

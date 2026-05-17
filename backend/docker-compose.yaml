@@ -7,9 +7,9 @@ services:
       PORT: 8788
       HOST: 0.0.0.0
       APP_ORIGIN: https://income.ccwu.cc
-      API_ALLOWED_ORIGINS: https://income.ccwu.cc
+      API_ALLOWED_ORIGINS: https://income.ccwu.cc,https://income-rent-system.pages.dev
       ADMIN_USERNAME: morefun886
-      ADMIN_PASSWORD_HASH: pbkdf2-sha256$120000$71967f384b82039181934393be30d845$4f5fc3e39642986fa1016f6991b38a727c8dcb0b389a12f50cd43cae31bd7fcb
+      ADMIN_PASSWORD: Mf848886#
       JWT_SECRET: ""
       UPLOAD_MAX_MB: 10
       BACKUP_DIR: /app/storage/backups
@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     command: tunnel run
     environment:
-      TUNNEL_TOKEN: 粘贴你的Token到这里
+      TUNNEL_TOKEN: eyJhIjoiZTM0MWQyNmRjZGJjYWRiNGViMDBiODU0MmNlZjQyOTUiLCJ0IjoiN2FlNGY2Y2YtNjY4Ny00NTc2LTgwZjktOTQ1MWU0Y2NhNTVkIiwicyI6Ill6UmtOREV6TVRjdE56TmtPQzAwWWpJeExUZ3hNMkV0TnpNeU1XSTNNV1JpTkdJd1lqRXlNMkZrWXprdFpUSTRaQzAwWW1SaUxUZ3paRFl0WW1ZMk56UmxOREEwTW1GbCJ9
     networks:
       - income-net
 
