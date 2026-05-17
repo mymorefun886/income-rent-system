@@ -6,8 +6,8 @@ import { apiEnabled } from "../lib/api";
 import { loginGuide } from "../lib/mock-data";
 
 const LoginPage = () => {
-  const [username, setUsername] = useState(loginGuide.defaultUsername);
-  const [password, setPassword] = useState(loginGuide.defaultPassword);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
