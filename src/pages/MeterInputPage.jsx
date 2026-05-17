@@ -9,10 +9,17 @@ export default function MeterInputPage() {
   const [records, setRecords] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [cycle, setCycle] = useState(new Date().toISOString().slice(0,7));
-  const [readings, setReadings] = useState({});
+  const STORAGE_KEY = "meter_input_" + new Date().toISOString().slice(0,7);
+  const [readings, setReadings] = useState(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}"); } catch { return {}; } });
+  const [savedCount, setSavedCount] = useState(Object.keys(readings).length);
   const [loading, setLoading] = useState(apiEnabled);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+
+  function saveLocal(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    setSavedCount(Object.keys(data).filter(k => data[k]?.e || data[k]?.w).length);
+  }
 
   async function load() {
     if (!apiEnabled) { setLoading(false); return; }
@@ -66,7 +73,9 @@ export default function MeterInputPage() {
   function setReading(rid, field, val) {
     setReadings(prev => {
       const cur = prev[rid] || { e: "", w: "" };
-      return { ...prev, [rid]: { ...cur, [field]: val } };
+      const next = { ...prev, [rid]: { ...cur, [field]: val } };
+      saveLocal(next);
+      return next;
     });
   }
 
@@ -123,7 +132,9 @@ export default function MeterInputPage() {
         else { await createRecord(payload); created++; }
       }
       setMsg(`同步完成：更新 ${updated} 条，新建 ${created} 条`);
+      localStorage.removeItem(STORAGE_KEY);
       setReadings({});
+      setSavedCount(0);
       load();
     } catch(e) { setMsg(e.message||"同步失败"); }
     finally { setSaving(false); }
@@ -138,7 +149,7 @@ export default function MeterInputPage() {
     <div className="max-w-lg mx-auto p-3 space-y-3">
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-4 text-white">
         <h1 className="text-lg font-bold">📱 手机抄表</h1>
-        <p className="text-xs opacity-80 mt-1">需联网 · 同步到云端</p>
+        <p className="text-xs opacity-80 mt-1">{savedCount > 0 ? `已暂存 ${savedCount} 间 · ` : ""}需联网 · 同步到云端</p>
         <div className="mt-2 flex items-center gap-2">
           <input className="rounded-lg px-3 py-1.5 text-sm text-slate-900" type="month" value={cycle} onChange={e => setCycle(e.target.value)} />
           <button className="rounded-lg bg-white/20 px-3 py-1.5 text-xs" onClick={load}><RefreshCw className="inline h-3 w-3 mr-1" />刷新</button>
@@ -169,7 +180,7 @@ export default function MeterInputPage() {
       ))}
 
       <div className="sticky bottom-2 flex gap-2 bg-white rounded-2xl p-3 shadow-lg ring-1 ring-slate-200">
-        <button className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-medium" onClick={() => setReadings({})}>清空</button>
+        <button className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-medium" onClick={() => { setReadings({}); localStorage.removeItem(STORAGE_KEY); setSavedCount(0); }}>清空</button>
         <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={syncToSystem}><Send className="inline h-4 w-4 mr-1" />{saving?"同步中...":"一键同步"}</button>
       </div>
     </div>
