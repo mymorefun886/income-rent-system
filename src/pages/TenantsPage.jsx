@@ -6,6 +6,7 @@ import {
   createTenant,
   deleteTenant,
   fetchProperties,
+  fetchRecords,
   fetchTenants,
   updateTenant,
   uploadFile,
@@ -153,6 +154,7 @@ export default function TenantsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [tenants, setTenants] = useState(apiEnabled ? [] : fallbackTenants);
   const [properties, setProperties] = useState(apiEnabled ? [] : fallbackProperties);
+  const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(apiEnabled);
   const [error, setError] = useState("");
 
@@ -162,6 +164,9 @@ export default function TenantsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
+  const [checkoutDaily, setCheckoutDaily] = useState(false);
+  const [checkoutElectric, setCheckoutElectric] = useState("");
+  const [checkoutWater, setCheckoutWater] = useState("");
   const [renewTarget, setRenewTarget] = useState(null);
   const [renewLeaseEnd, setRenewLeaseEnd] = useState("");
   const [renewRent, setRenewRent] = useState("");
@@ -174,10 +179,11 @@ export default function TenantsPage() {
         return;
       }
       try {
-        const [t, p] = await Promise.all([fetchTenants(), fetchProperties()]);
+        const [t, p, r] = await Promise.all([fetchTenants(), fetchProperties(), fetchRecords()]);
         if (!cancelled) {
           setTenants(Array.isArray(t) ? t : []);
           setProperties(Array.isArray(p) ? p : []);
+          setRecords(Array.isArray(r) ? r : []);
           setError("");
         }
       } catch (e) {
@@ -325,10 +331,13 @@ export default function TenantsPage() {
   async function checkoutTenant() {
     if (!checkoutTarget) return;
     try {
-      const payload = { ...checkoutTarget, archived: true, status: "已退租", checkoutDate: new Date().toISOString().slice(0, 10) };
+      const payload = { ...checkoutTarget, archived: true, status: "已退租", checkoutDate: checkoutDate || new Date().toISOString().slice(0, 10) };
       const saved = apiEnabled ? await updateTenant(checkoutTarget.id, payload) : payload;
       setTenants((prev) => prev.map((t) => (t.id === checkoutTarget.id ? saved : t)));
       setCheckoutTarget(null);
+      setCheckoutDaily(false);
+      setCheckoutElectric("");
+      setCheckoutWater("");
       setError("");
     } catch (e) {
       setError(e.message || "退租失败");
@@ -489,18 +498,94 @@ export default function TenantsPage() {
         </div>
       ) : null}
 
-      {checkoutTarget ? (
+      {checkoutTarget ? (() => {
+        const deposit = Number(checkoutTarget.deposit || 0);
+        const rent = Number(checkoutTarget.rent || 0);
+        const leaseEnd = checkoutTarget.leaseEnd || "";
+        const bld = checkoutTarget.building || "";
+        const rm = checkoutTarget.room || "";
+        // 查未结账单
+        const unpaidBills = (records || []).filter(r => {
+          const rt = String(r.tenant || "").trim();
+          const ct = String(checkoutTarget.name || "").trim();
+          const rk = (r.building||"")+"::"+ (r.roomNo||r.room||"");
+          const ck = bld+"::"+rm;
+          return (r.tenantId === checkoutTarget.id || rt === ct || rk === ck) && Number(r.receivable||0) > (Array.isArray(r.payments)?r.payments.reduce((s,p)=>s+Number(p.amount||0),0):Number(r.received||0));
+        });
+        const unpaidTotal = unpaidBills.reduce((s,r) => s + Math.max(0, Number(r.receivable||0) - (Array.isArray(r.payments)?r.payments.reduce((a,p)=>a+Number(p.amount||0),0):Number(r.received||0))), 0);
+        // 按天折算
+        const checkoutD = checkoutDate ? new Date(checkoutDate+"T00:00:00") : new Date();
+        const leaseEndD = leaseEnd ? new Date(leaseEnd+"T00:00:00") : checkoutD;
+        const extraDays = Math.max(0, Math.ceil((checkoutD - leaseEndD)/(24*60*60*1000)));
+        const daysInMonth = new Date(checkoutD.getFullYear(), checkoutD.getMonth()+1, 0).getDate();
+        const dailyRent = daysInMonth > 0 ? rent / daysInMonth : 0;
+        const useDaily = extraDays > 0 && checkoutDaily;
+        const dailyRentAmount = useDaily ? Math.round(dailyRent * extraDays * 100) / 100 : 0;
+        // 水电
+        const lastRec = (records || []).filter(r => {
+          const rk = (r.building||"")+"::"+ (r.roomNo||r.room||"");
+          const ck = bld+"::"+rm;
+          return (r.tenantId === checkoutTarget.id || String(r.tenant||"").trim() === String(checkoutTarget.name||"").trim() || rk === ck);
+        }).sort((a,b) => String(b.cycle||"").localeCompare(String(a.cycle||"")))[0] || null;
+        const ePrev = Number(lastRec?.electricNow || lastRec?.electricPrev || 0);
+        const wPrev = Number(lastRec?.waterNow || lastRec?.waterPrev || 0);
+        const eUsage = checkoutElectric ? Math.max(0, Number(checkoutElectric) - ePrev) : 0;
+        const wUsage = checkoutWater ? Math.max(0, Number(checkoutWater) - wPrev) : 0;
+        const elecAmt = useDaily ? Math.round(eUsage * 0.8 * 100) / 100 : 0;
+        const waterAmt = useDaily ? Math.round(wUsage * 5.5 * 100) / 100 : 0;
+        const totalDeduct = unpaidTotal + dailyRentAmount + elecAmt + waterAmt;
+        const refund = Math.max(0, deposit - totalDeduct);
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5">
-            <h3 className="text-lg font-semibold">退租确认</h3>
-            <p className="mt-2 text-sm text-slate-600">确认将 {checkoutTarget.name} 标记为已退租？</p>
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 max-h-[92vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold">退租结算：{checkoutTarget.name}</h3>
+            <p className="text-sm text-slate-500">{bld} {rm} · 租期至 {leaseEnd || "-"}</p>
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex justify-between"><span>押金</span><span className="font-bold text-emerald-700">+¥{deposit.toFixed(2)}</span></div>
+              {unpaidBills.length > 0 && unpaidBills.map(b => {
+                const paid = Array.isArray(b.payments) ? b.payments.reduce((s,p)=>s+Number(p.amount||0),0) : Number(b.received||0);
+                const u = Math.max(0, Number(b.receivable||0) - paid);
+                return <div key={b.id} className="flex justify-between"><span className="text-rose-600 pl-3 text-xs">{b.cycle} {b.rentPart>0?'租金':'水电'} 未收</span><span className="text-rose-700">-¥{u.toFixed(2)}</span></div>;
+              })}
+              {extraDays > 0 && (
+                <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                  <input type="checkbox" checked={checkoutDaily} onChange={(e) => setCheckoutDaily(e.target.checked)} />
+                  按天折算（多住 {extraDays} 天，{rent}÷{daysInMonth}×{extraDays}）
+                </label>
+              )}
+              {useDaily && extraDays > 0 && (
+                <div className="flex justify-between"><span className="text-rose-600 pl-3 text-xs">多住 {extraDays} 天租金</span><span className="text-rose-700">-¥{dailyRentAmount.toFixed(2)}</span></div>
+              )}
+              {useDaily && extraDays > 0 && (
+                <div className="rounded-lg bg-slate-50 p-2 space-y-1">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span>电</span><span className="text-slate-400">上期 {ePrev}</span>
+                    <input className="ml-auto w-20 rounded border border-slate-300 px-2 py-1 text-xs" type="number" placeholder="最终读数" value={checkoutElectric} onChange={(e) => setCheckoutElectric(e.target.value)} />
+                    {eUsage > 0 && <span className="text-rose-600">-¥{elecAmt.toFixed(2)}</span>}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span>水</span><span className="text-slate-400">上期 {wPrev}</span>
+                    <input className="ml-auto w-20 rounded border border-slate-300 px-2 py-1 text-xs" type="number" placeholder="最终读数" value={checkoutWater} onChange={(e) => setCheckoutWater(e.target.value)} />
+                    {wUsage > 0 && <span className="text-rose-600">-¥{waterAmt.toFixed(2)}</span>}
+                  </div>
+                </div>
+              )}
+              <div className="border-t pt-2 flex justify-between font-bold text-base">
+                <span>应退押金</span>
+                <span className={refund >= 0 ? "text-emerald-700" : "text-rose-700"}>¥{refund.toFixed(2)}</span>
+              </div>
+            </div>
+            <label className="mt-3 block text-sm">退租日期
+              <input type="date" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={checkoutDate} onChange={(e) => setCheckoutDate(e.target.value)} />
+            </label>
             <div className="mt-4 flex justify-end gap-2">
-              <button className="rounded-xl border border-slate-300 px-3 py-2" type="button" onClick={() => setCheckoutTarget(null)}>取消</button>
-              <button className="rounded-xl bg-amber-600 px-3 py-2 text-white" type="button" onClick={checkoutTenant}>确认退租</button>
+              <button className="rounded-xl border border-slate-300 px-3 py-2" type="button" onClick={() => { setCheckoutTarget(null); setCheckoutDaily(false); setCheckoutElectric(""); setCheckoutWater(""); }}>取消</button>
+              <button className="rounded-xl bg-amber-600 px-3 py-2 text-white font-semibold" type="button" onClick={checkoutTenant}>确认退租</button>
             </div>
           </div>
         </div>
-      ) : null}
+        );
+      })() : null}
 
       {renewTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
