@@ -1050,43 +1050,8 @@ const RentRecordsPage = () => {
         <div className="mt-3 flex flex-wrap gap-2">
           <button className="rounded-xl border border-sky-200 px-3 py-2 text-sm" type="button" onClick={openCreate}>新增账单</button>
           <button className="rounded-xl border border-rose-200 px-3 py-2 text-sm text-rose-700" type="button" onClick={clearAll}>清空账单</button>
+          <button className="rounded-xl border border-pink-200 px-3 py-2 text-sm text-pink-700" type="button" onClick={generateBillImages} disabled={generatingImages}><Image className="inline h-4 w-4 mr-1" />{generatingImages ? "生成中..." : "生成账单图片"}</button>
         </div>
-      </section>
-
-      <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <h2 className="text-lg font-semibold">抄表工具</h2>
-        <p className="mt-1 text-xs text-slate-500">手机抄表 → 导出 CSV → 导入生成账单</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input className="rounded-xl border border-slate-200 px-3 py-2 text-sm" type="month" value={sheetCycle} onChange={(e) => setSheetCycle(e.target.value)} title="导入目标账期" />
-          <label className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 text-sm text-emerald-700 cursor-pointer">
-            📥 导入手机抄表CSV
-            <input className="hidden" type="file" accept=".csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleMeterCsvImport(f); e.target.value = ''; }} />
-          </label>
-          <button className="inline-flex items-center gap-2 rounded-xl border border-pink-200 px-3 py-2 text-sm text-pink-700" type="button" onClick={generateBillImages} disabled={generatingImages}><Image className="h-4 w-4" />{generatingImages ? "生成中..." : "生成账单图片"}</button>
-        </div>
-        <details className="mt-3">
-          <summary className="cursor-pointer text-sm text-slate-600">📋 粘贴 CSV 内容直接导入</summary>
-          <textarea
-            className="mt-2 w-full rounded-xl border border-slate-300 p-3 text-xs font-mono"
-            rows={5}
-            placeholder="building,room,electricNow,waterNow
-西山东区17号,101,6910,268
-西山东区17号,102,7220,272"
-            value={csvPasteText}
-            onChange={(e) => setCsvPasteText(e.target.value)}
-          />
-          <button
-            className="mt-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm text-white font-medium disabled:opacity-50"
-            type="button"
-            disabled={!csvPasteText.trim()}
-            onClick={async () => {
-              const blob = new Blob(["﻿"+csvPasteText], {type:"text/csv"});
-              const file = new File([blob], "paste.csv", {type:"text/csv"});
-              await handleMeterCsvImport(file);
-              setCsvPasteText("");
-            }}
-          >⚡ 一键导入</button>
-        </details>
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">

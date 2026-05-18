@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Download, Printer, RefreshCw, Send } from "lucide-react";
+import { Download, Printer, RefreshCw, Send, Upload } from "lucide-react";
 import { apiEnabled, createRecord, fetchProperties, fetchRecords, fetchTenants, updateRecord } from "../lib/api";
 
 function makeRoomKey(b, r) { return (b||"").trim()+"::"+(r||"").replace(/\s+/g,"").toUpperCase(); }
@@ -15,6 +15,58 @@ export default function MeterInputPage() {
   const [loading, setLoading] = useState(apiEnabled);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [csvPasteText, setCsvPasteText] = useState("");
+
+  function applyCsvRows(rows) {
+    const next = { ...readings };
+    let count = 0;
+    for (const row of rows) {
+      const rid = makeRoomKey(row.building, row.room);
+      const found = rooms.find(r => makeRoomKey(r.b, r.r) === rid);
+      if (!found) continue;
+      next[rid] = { e: row.electricNow || "", w: row.waterNow || "" };
+      count++;
+    }
+    setReadings(next);
+    saveLocal(next);
+    setMsg(`CSV 导入完成：匹配 ${count} 间`);
+  }
+
+  function handleCsvFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = String(e.target.result || "");
+      const rows = parseCsvText(text);
+      if (!rows.length) { setMsg("CSV 格式不正确或无有效数据"); return; }
+      applyCsvRows(rows);
+    };
+    reader.readAsText(file);
+  }
+
+  function parseCsvText(text) {
+    const lines = text.replace(/^﻿/, "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) return [];
+    const header = lines[0].split(",").map(h => h.trim());
+    const bi = header.indexOf("building"), ri = header.indexOf("room"), ei = header.indexOf("electricNow"), wi = header.indexOf("waterNow");
+    if (ri < 0) return [];
+    return lines.slice(1).map(line => {
+      const cols = line.split(",").map(c => c.trim());
+      return {
+        building: bi >= 0 ? cols[bi] : "",
+        room: cols[ri],
+        electricNow: ei >= 0 ? cols[ei] : "",
+        waterNow: wi >= 0 ? cols[wi] : ""
+      };
+    }).filter(r => r.room && (r.electricNow || r.waterNow));
+  }
+
+  function handleCsvPaste() {
+    const rows = parseCsvText(csvPasteText);
+    if (!rows.length) { setMsg("CSV 格式不正确或无有效数据"); return; }
+    applyCsvRows(rows);
+    setCsvPasteText("");
+  }
 
   function saveLocal(data) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -215,6 +267,31 @@ export default function MeterInputPage() {
       </div>
 
       {msg && <div className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-700">{msg}</div>}
+
+      <details className="rounded-2xl bg-white ring-1 ring-slate-200 overflow-hidden">
+        <summary className="px-4 py-2.5 text-sm font-semibold text-slate-600 cursor-pointer bg-slate-50">📋 CSV 导入读数</summary>
+        <div className="p-3 space-y-2">
+          <label className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 text-sm text-emerald-700 cursor-pointer w-full justify-center">
+            <Upload className="h-4 w-4" /> 上传 CSV 文件
+            <input className="hidden" type="file" accept=".csv" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ''; }} />
+          </label>
+          <textarea
+            className="w-full rounded-xl border border-slate-300 p-3 text-xs font-mono"
+            rows={4}
+            placeholder="building,room,electricNow,waterNow
+西山东区17号,101,6910,268
+西山东区17号,102,7220,272"
+            value={csvPasteText}
+            onChange={(e) => setCsvPasteText(e.target.value)}
+          />
+          <button
+            className="w-full rounded-xl bg-emerald-600 py-2 text-sm text-white font-medium disabled:opacity-50"
+            type="button"
+            disabled={!csvPasteText.trim()}
+            onClick={handleCsvPaste}
+          >⚡ 一键填入</button>
+        </div>
+      </details>
 
       {Object.entries(groups).map(([bld, rs]) => (
         <div key={bld} className="rounded-2xl bg-white ring-1 ring-slate-200 overflow-hidden">
