@@ -372,15 +372,15 @@ function ensureDbCollections(db) {
   const at = db.settings.automationTasks;
   if (!at.contractReminder || typeof at.contractReminder !== "object") at.contractReminder = {};
   if (!at.monthlyBillGenerate || typeof at.monthlyBillGenerate !== "object") at.monthlyBillGenerate = {};
-  if (!at.weeklyBackup || typeof at.weeklyBackup !== "object") at.weeklyBackup = {};
+  if (!at.dailyBackup || typeof at.dailyBackup !== "object") at.dailyBackup = {};
   if (!at.anomalyPush || typeof at.anomalyPush !== "object") at.anomalyPush = {};
   if (typeof at.contractReminder.enabled !== "boolean") at.contractReminder.enabled = true;
   if (typeof at.contractReminder.runHour !== "number") at.contractReminder.runHour = 9;
   if (typeof at.monthlyBillGenerate.enabled !== "boolean") at.monthlyBillGenerate.enabled = false;
   if (typeof at.monthlyBillGenerate.runHour !== "number") at.monthlyBillGenerate.runHour = 9;
-  if (typeof at.weeklyBackup.enabled !== "boolean") at.weeklyBackup.enabled = true;
-  if (typeof at.weeklyBackup.weekday !== "number") at.weeklyBackup.weekday = 1;
-  if (typeof at.weeklyBackup.runHour !== "number") at.weeklyBackup.runHour = 4;
+  if (typeof at.dailyBackup.enabled !== "boolean") at.dailyBackup.enabled = true;
+  if (typeof at.dailyBackup.runHour !== "number") at.dailyBackup.runHour = 6;
+  if (typeof at.dailyBackup.keepDays !== "number") at.dailyBackup.keepDays = 60;
   if (typeof at.anomalyPush.enabled !== "boolean") at.anomalyPush.enabled = false;
   if (typeof at.anomalyPush.runHour !== "number") at.anomalyPush.runHour = 10;
   if (typeof at.anomalyPush.webhook !== "string") at.anomalyPush.webhook = "";
@@ -649,9 +649,10 @@ async function runAutomationTaskByKey(db, key, trigger = "auto", operator = "sys
   } else if (key === "monthlyBillGenerate") {
     const ret = generateMonthStartBillsInternal(db, operator);
     result = { ...result, cycle: ret.cycle, count: ret.count };
-  } else if (key === "weeklyBackup") {
-    const backupPath = makeDataBackup("auto-weekly");
+  } else if (key === "dailyBackup") {
+    const backupPath = makeDataBackup("auto-daily");
     result = { ...result, backupPath };
+    cleanupOldBackups(at.dailyBackup?.keepDays ?? 60);
   } else if (key === "anomalyPush") {
     const webhook = ""; // WeCom disabled
     const ret = await pushAnomalySummaryInternal(db, webhook);
@@ -757,6 +758,27 @@ function makeDataBackup(reason = "data-health") {
   const target = path.join(backupDir, `db.${reason}.${stamp}.json`);
   writeFileSync(target, readFileSync(dbPath, "utf8"));
   return target;
+}
+
+function cleanupOldBackups(keepDays = 60) {
+  if (!existsSync(backupDir)) return 0;
+  const cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000;
+  let cleaned = 0;
+  try {
+    const files = readdirSync(backupDir);
+    for (const name of files) {
+      if (!/^db\.auto-(daily|weekly|backup)\..+\.json$/.test(name)) continue;
+      const fullPath = path.join(backupDir, name);
+      try {
+        if (statSync(fullPath).mtimeMs < cutoff) {
+          unlinkSync(fullPath);
+          cleaned++;
+        }
+      } catch {}
+    }
+  } catch {}
+  if (cleaned > 0) console.log(`📦 已清理 ${cleaned} 个过期备份（>${keepDays}天）`);
+  return cleaned;
 }
 
 function getRecordPaidAmount(record = {}) {
@@ -2249,12 +2271,12 @@ const server = http.createServer(async (request, response) => {
           runHour: Math.max(0, Math.min(23, Number((body.monthlyBillGenerate || {}).runHour ?? (current.monthlyBillGenerate || {}).runHour ?? 9))),
           enabled: Boolean((body.monthlyBillGenerate || {}).enabled ?? (current.monthlyBillGenerate || {}).enabled),
         },
-        weeklyBackup: {
-          ...(current.weeklyBackup || {}),
-          ...(body.weeklyBackup || {}),
-          weekday: Math.max(0, Math.min(6, Number((body.weeklyBackup || {}).weekday ?? (current.weeklyBackup || {}).weekday ?? 1))),
-          runHour: Math.max(0, Math.min(23, Number((body.weeklyBackup || {}).runHour ?? (current.weeklyBackup || {}).runHour ?? 4))),
-          enabled: Boolean((body.weeklyBackup || {}).enabled ?? (current.weeklyBackup || {}).enabled),
+        dailyBackup: {
+          ...(current.dailyBackup || {}),
+          ...(body.dailyBackup || {}),
+          runHour: Math.max(0, Math.min(23, Number((body.dailyBackup || {}).runHour ?? (current.dailyBackup || {}).runHour ?? 6))),
+          keepDays: Math.max(1, Math.min(365, Number((body.dailyBackup || {}).keepDays ?? (current.dailyBackup || {}).keepDays ?? 60))),
+          enabled: Boolean((body.dailyBackup || {}).enabled ?? (current.dailyBackup || {}).enabled),
         },
         anomalyPush: {
           ...(current.anomalyPush || {}),
@@ -3888,7 +3910,6 @@ async function runAutomationSchedulerTick() {
     ensureDbCollections(db);
     const at = db.settings.automationTasks || {};
     const lastRuns = at.lastRuns || {};
-    const weekday = now.getDay();
     const ran = [];
 
     if (at.contractReminder?.enabled && hour >= Number(at.contractReminder.runHour || 9) && runKeyByScheduleToday(lastRuns, "contractReminder", today)) {
@@ -3897,8 +3918,8 @@ async function runAutomationSchedulerTick() {
     if (at.monthlyBillGenerate?.enabled && now.getDate() === 1 && hour >= Number(at.monthlyBillGenerate.runHour || 9) && runKeyByScheduleToday(lastRuns, "monthlyBillGenerate", today)) {
       ran.push(await runAutomationTaskByKey(db, "monthlyBillGenerate", "auto", "system"));
     }
-    if (at.weeklyBackup?.enabled && weekday === Number(at.weeklyBackup.weekday ?? 1) && hour >= Number(at.weeklyBackup.runHour || 4) && runKeyByScheduleToday(lastRuns, "weeklyBackup", today)) {
-      ran.push(await runAutomationTaskByKey(db, "weeklyBackup", "auto", "system"));
+    if (at.dailyBackup?.enabled && hour >= Number(at.dailyBackup.runHour || 6) && runKeyByScheduleToday(lastRuns, "dailyBackup", today)) {
+      ran.push(await runAutomationTaskByKey(db, "dailyBackup", "auto", "system"));
     }
     if (at.anomalyPush?.enabled && hour >= Number(at.anomalyPush.runHour || 10) && runKeyByScheduleToday(lastRuns, "anomalyPush", today)) {
       ran.push(await runAutomationTaskByKey(db, "anomalyPush", "auto", "system"));
