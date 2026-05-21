@@ -104,15 +104,14 @@ function IdPhotoCard({ label, side, url, onUpload, onPreview, onRemove, uploadin
   return (
     <div className="rounded-xl border border-slate-300 overflow-hidden">
       {url ? (
-        <div className="relative group">
+        <div className="relative group cursor-pointer" onClick={() => onPreview && onPreview(toPreviewUrl(url))}>
           <img
-            className="w-full h-40 object-contain bg-slate-100 cursor-pointer"
+            className="w-full h-40 object-contain bg-slate-100"
             src={toPreviewUrl(url)}
             alt={label}
-            onClick={() => onPreview && onPreview(toPreviewUrl(url))}
           />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-            <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center pointer-events-none">
+            <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           <button
             className="absolute top-1.5 right-1.5 rounded-full bg-white/90 hover:bg-rose-50 p-1.5 shadow transition"
