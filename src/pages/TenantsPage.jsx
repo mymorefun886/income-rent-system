@@ -482,7 +482,7 @@ export default function TenantsPage() {
             <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-lg font-semibold text-slate-900">{item.name || "-"}</div>
+                  <div className="text-lg font-semibold text-slate-900">{item.name || "-"}{(item.idCardFront || item.idCardBack) ? <span className="ml-1.5" title="已上传身份证照片">👤</span> : null}</div>
                   <div className="mt-1 text-sm text-slate-600">{item.building ? `${item.building} ` : ""}{item.room || "-"}</div>
                 </div>
                 <span className={`rounded px-2 py-1 text-xs ${getStatusTone(item.status || "正常")}`}>{item.status || "正常"}</span>
