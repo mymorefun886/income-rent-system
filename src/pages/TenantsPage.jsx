@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { Edit3, Plus, RefreshCw, Trash2, Users, UserX } from "lucide-react";
+import { Edit3, Plus, RefreshCw, Trash2, Users, UserX, X, ZoomIn } from "lucide-react";
 import {
   API_BASE_URL,
   apiEnabled,
@@ -13,6 +13,7 @@ import {
 } from "../lib/api";
 import { properties as fallbackProperties, tenants as fallbackTenants } from "../lib/mock-data";
 import { formatCurrency, formatDate, getStatusTone } from "../lib/format";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const quickLeaseButtons = [
   { label: "半年", months: 6 },
@@ -91,6 +92,48 @@ function toPreviewUrl(url) {
   return API_BASE_URL ? `${API_BASE_URL}${url}` : url;
 }
 
+function IdPhotoCard({ label, side, url, onUpload, onPreview, onRemove }) {
+  const sideLabel = side === "idCardFront" ? "正面" : "反面";
+  return (
+    <div className="rounded-xl border border-slate-300 overflow-hidden">
+      {url ? (
+        <div className="relative group">
+          <img
+            className="w-full h-40 object-contain bg-slate-100 cursor-pointer"
+            src={toPreviewUrl(url)}
+            alt={label}
+            onClick={() => onPreview && onPreview(toPreviewUrl(url))}
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+            <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          </div>
+          <button
+            className="absolute top-1.5 right-1.5 rounded-full bg-white/90 hover:bg-rose-50 p-1.5 shadow transition"
+            type="button"
+            title="移除照片"
+            onClick={(e) => { e.stopPropagation(); onRemove && onRemove(); }}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+          </button>
+        </div>
+      ) : (
+        <label className="flex flex-col items-center justify-center h-40 cursor-pointer text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors p-3">
+          <Plus className="h-6 w-6 mb-1" />
+          <span className="text-xs">{label}</span>
+          <input className="hidden" type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { onUpload(f, side); e.target.value = ""; } }} />
+        </label>
+      )}
+      {url && (
+        <label className="flex items-center justify-center gap-1 py-2 text-xs text-slate-500 cursor-pointer hover:text-blue-600 hover:bg-blue-50 transition-colors">
+          <Plus className="h-3 w-3" />
+          <span>更新{sideLabel}</span>
+          <input className="hidden" type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { onUpload(f, side); e.target.value = ""; } }} />
+        </label>
+      )}
+    </div>
+  );
+}
+
 function makeForm() {
   const now = new Date();
   const end = new Date(now);
@@ -163,6 +206,9 @@ export default function TenantsPage() {
   const [form, setForm] = useState(makeForm());
 
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [pendingRemoveSide, setPendingRemoveSide] = useState(null);
+  const [pendingUpload, setPendingUpload] = useState(null);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [checkoutDaily, setCheckoutDaily] = useState(false);
   const [checkoutElectric, setCheckoutElectric] = useState("");
@@ -277,7 +323,8 @@ export default function TenantsPage() {
     setForm((prev) => ({ ...prev, feeItems: (prev.feeItems || []).filter((f) => f.id !== id) }));
   }
 
-  async function handleTenantIdUpload(file, side) {
+  async function doUpload(file, side) {
+    setPendingUpload(null);
     try {
       const uploaded = await uploadFile(file);
       setForm((prev) => ({ ...prev, [side]: uploaded.url }));
@@ -285,6 +332,21 @@ export default function TenantsPage() {
     } catch (e) {
       setError(e.message || "身份证上传失败");
     }
+  }
+
+  function handleTenantIdUpload(file, side) {
+    if (form[side]) {
+      // 已有照片 → 弹窗确认是否替换
+      setPendingUpload({ file, side });
+      return;
+    }
+    doUpload(file, side);
+  }
+
+  function confirmRemovePhoto() {
+    if (!pendingRemoveSide) return;
+    setForm((prev) => ({ ...prev, [pendingRemoveSide]: "" }));
+    setPendingRemoveSide(null);
   }
 
   async function saveTenant() {
@@ -429,18 +491,24 @@ export default function TenantsPage() {
                 </select>
               </label>
               <div className="text-sm md:col-span-2">
-                <div className="mb-2 font-medium">身份证照片（上传后自动识别）</div>
+                <div className="mb-2 font-medium">身份证照片</div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <label className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700">
-                    身份证正面上传
-                    <input className="hidden" type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleTenantIdUpload(f, "idCardFront"); e.target.value = ""; }} />
-                    {form.idCardFront ? <img className="mt-2 h-20 w-auto rounded border border-slate-200" src={toPreviewUrl(form.idCardFront)} alt="身份证正面" /> : null}
-                  </label>
-                  <label className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700">
-                    身份证反面上传
-                    <input className="hidden" type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleTenantIdUpload(f, "idCardBack"); e.target.value = ""; }} />
-                    {form.idCardBack ? <img className="mt-2 h-20 w-auto rounded border border-slate-200" src={toPreviewUrl(form.idCardBack)} alt="身份证反面" /> : null}
-                  </label>
+                  <IdPhotoCard
+                    label="身份证正面"
+                    side="idCardFront"
+                    url={form.idCardFront}
+                    onUpload={handleTenantIdUpload}
+                    onPreview={setPreviewImage}
+                    onRemove={() => setPendingRemoveSide("idCardFront")}
+                  />
+                  <IdPhotoCard
+                    label="身份证反面"
+                    side="idCardBack"
+                    url={form.idCardBack}
+                    onUpload={handleTenantIdUpload}
+                    onPreview={setPreviewImage}
+                    onRemove={() => setPendingRemoveSide("idCardBack")}
+                  />
                 </div>
               </div>
               <label className="text-sm">租期开始<input type="date" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.leaseStart} onChange={(e) => setForm((p) => ({ ...p, leaseStart: e.target.value }))} /></label>
@@ -602,6 +670,31 @@ export default function TenantsPage() {
           </div>
         </div>
       ) : null}
+
+      {previewImage ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setPreviewImage(null)}>
+          <button className="absolute top-4 right-4 rounded-full bg-white/20 p-2 text-white hover:bg-white/30 transition" type="button" onClick={() => setPreviewImage(null)}><X className="h-6 w-6" /></button>
+          <img className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl" src={previewImage} alt="预览" onClick={(e) => e.stopPropagation()} />
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        open={!!pendingUpload}
+        title="更新身份证照片"
+        message={pendingUpload?.side === "idCardFront" ? "已存在身份证正面照片，是否用新照片替换？" : "已存在身份证反面照片，是否用新照片替换？"}
+        tone="warning"
+        onCancel={() => setPendingUpload(null)}
+        onConfirm={() => { if (pendingUpload) doUpload(pendingUpload.file, pendingUpload.side); }}
+      />
+
+      <ConfirmDialog
+        open={!!pendingRemoveSide}
+        title="移除身份证照片"
+        message={pendingRemoveSide === "idCardFront" ? "确认移除身份证正面照片？" : "确认移除身份证反面照片？"}
+        tone="danger"
+        onCancel={() => setPendingRemoveSide(null)}
+        onConfirm={confirmRemovePhoto}
+      />
     </div>
   );
 }
