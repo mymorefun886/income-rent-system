@@ -92,8 +92,15 @@ function toPreviewUrl(url) {
   return API_BASE_URL ? `${API_BASE_URL}${url}` : url;
 }
 
-function IdPhotoCard({ label, side, url, onUpload, onPreview, onRemove }) {
+function IdPhotoCard({ label, side, url, onUpload, onPreview, onRemove, uploading, error }) {
   const sideLabel = side === "idCardFront" ? "正面" : "反面";
+  const busy = uploading === side;
+  const FileInput = ({ children, className }) => (
+    <label className={className + " relative cursor-pointer"}>
+      {children}
+      <input className="absolute inset-0 opacity-0 cursor-pointer" type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { onUpload(f, side); e.target.value = ""; } }} />
+    </label>
+  );
   return (
     <div className="rounded-xl border border-slate-300 overflow-hidden">
       {url ? (
@@ -116,19 +123,31 @@ function IdPhotoCard({ label, side, url, onUpload, onPreview, onRemove }) {
             <Trash2 className="h-3.5 w-3.5 text-rose-600" />
           </button>
         </div>
+      ) : busy ? (
+        <div className="flex flex-col items-center justify-center h-40 text-slate-400">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+          <span className="text-xs mt-2">上传中...</span>
+        </div>
       ) : (
-        <label className="flex flex-col items-center justify-center h-40 cursor-pointer text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors p-3">
+        <FileInput className="flex flex-col items-center justify-center h-40 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors p-3">
           <Plus className="h-6 w-6 mb-1" />
           <span className="text-xs">{label}</span>
-          <input className="hidden" type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { onUpload(f, side); e.target.value = ""; } }} />
-        </label>
+        </FileInput>
       )}
-      {url && (
-        <label className="flex items-center justify-center gap-1 py-2 text-xs text-slate-500 cursor-pointer hover:text-blue-600 hover:bg-blue-50 transition-colors">
+      {error && (
+        <div className="px-3 py-1.5 text-xs text-rose-600 bg-rose-50">{error}</div>
+      )}
+      {url && !busy && (
+        <FileInput className="flex items-center justify-center gap-1 py-2 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors">
           <Plus className="h-3 w-3" />
           <span>更新{sideLabel}</span>
-          <input className="hidden" type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { onUpload(f, side); e.target.value = ""; } }} />
-        </label>
+        </FileInput>
+      )}
+      {url && busy && (
+        <div className="flex items-center justify-center gap-1 py-2 text-xs text-slate-400">
+          <div className="h-3 w-3 animate-spin rounded-full border border-slate-300 border-t-blue-600" />
+          <span>上传中...</span>
+        </div>
       )}
     </div>
   );
@@ -209,6 +228,8 @@ export default function TenantsPage() {
   const [previewImage, setPreviewImage] = useState(null);
   const [pendingRemoveSide, setPendingRemoveSide] = useState(null);
   const [pendingUpload, setPendingUpload] = useState(null);
+  const [uploadingSide, setUploadingSide] = useState(null);
+  const [uploadError, setUploadError] = useState("");
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [checkoutDaily, setCheckoutDaily] = useState(false);
   const [checkoutElectric, setCheckoutElectric] = useState("");
@@ -293,6 +314,8 @@ export default function TenantsPage() {
   function closeModal() {
     setModalOpen(false);
     setEditingTenant(null);
+    setUploadingSide(null);
+    setUploadError("");
   }
 
   function onRoomSelect(value) {
@@ -325,11 +348,16 @@ export default function TenantsPage() {
 
   async function doUpload(file, side) {
     setPendingUpload(null);
+    setUploadingSide(side);
+    setUploadError("");
     try {
       const uploaded = await uploadFile(file);
       setForm((prev) => ({ ...prev, [side]: uploaded.url }));
+      setUploadingSide(null);
       setError("");
     } catch (e) {
+      setUploadingSide(null);
+      setUploadError(e.message || "身份证上传失败");
       setError(e.message || "身份证上传失败");
     }
   }
@@ -500,6 +528,8 @@ export default function TenantsPage() {
                     onUpload={handleTenantIdUpload}
                     onPreview={setPreviewImage}
                     onRemove={() => setPendingRemoveSide("idCardFront")}
+                    uploading={uploadingSide}
+                    error={!uploadingSide ? uploadError : ""}
                   />
                   <IdPhotoCard
                     label="身份证反面"
@@ -508,6 +538,8 @@ export default function TenantsPage() {
                     onUpload={handleTenantIdUpload}
                     onPreview={setPreviewImage}
                     onRemove={() => setPendingRemoveSide("idCardBack")}
+                    uploading={uploadingSide}
+                    error={!uploadingSide ? uploadError : ""}
                   />
                 </div>
               </div>
