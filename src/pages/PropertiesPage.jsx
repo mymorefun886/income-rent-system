@@ -3,6 +3,7 @@ import { Building2, Edit3, Home, Plus, Trash2 } from "lucide-react";
 import { apiEnabled, createProperty, deleteProperty, fetchProperties, fetchRecords, fetchTenants, updateProperty } from "../lib/api";
 import { properties as fallbackProperties, tenants as fallbackTenants } from "../lib/mock-data";
 import { formatCurrency } from "../lib/format";
+import { useProperties, useRecords, useTenants } from "../hooks/useApiQuery";
 import ConfirmDialog from "../components/ConfirmDialog";
 
 const PROPERTY_TYPES = ["小区住宅", "城中村/农民房", "公寓", "商铺/门面房", "写字楼/办公室", "厂房/车间", "仓库/车库/停车位"];
@@ -79,10 +80,14 @@ function makeForm() {
 }
 
 export default function PropertiesPage() {
+  const { data: queryProperties = [], isLoading: pLoading } = useProperties();
+  const { data: queryTenants = [], isLoading: tLoading } = useTenants();
+  const { data: queryRecords = [], isLoading: rLoading } = useRecords();
+  const loading = pLoading || tLoading || rLoading;
+
   const [properties, setProperties] = useState(apiEnabled ? [] : fallbackProperties);
   const [tenants, setTenants] = useState(apiEnabled ? [] : fallbackTenants);
   const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(apiEnabled);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -90,31 +95,9 @@ export default function PropertiesPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(makeForm());
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!apiEnabled) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const [p, t, r] = await Promise.all([fetchProperties(), fetchTenants(), fetchRecords()]);
-        if (cancelled) return;
-        setProperties(Array.isArray(p) ? p : []);
-        setTenants(Array.isArray(t) ? t : []);
-        setRecords(Array.isArray(r) ? r : []);
-        setError("");
-      } catch (e) {
-        if (!cancelled) setError(e.message || "读取房产失败");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  React.useEffect(() => { if (queryProperties.length > 0) setProperties(queryProperties); }, [queryProperties]);
+  React.useEffect(() => { if (queryTenants.length > 0) setTenants(queryTenants); }, [queryTenants]);
+  React.useEffect(() => { if (queryRecords.length > 0) setRecords(queryRecords); }, [queryRecords]);
 
   const tenantMap = useMemo(() => {
     const m = new Map();

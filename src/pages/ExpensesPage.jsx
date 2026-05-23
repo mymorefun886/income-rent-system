@@ -10,6 +10,7 @@ import {
   fetchProperties,
   updateExpense,
 } from "../lib/api";
+import { useExpenses, useProperties } from "../hooks/useApiQuery";
 
 const CATEGORY_OPTIONS = ["水费", "电费", "充电桩", "燃气费", "宽带费", "物业管理费", "税费", "日常维修", "其他"];
 const PAYMENT_METHODS = ["微信", "支付宝", "银行卡", "现金", "其他"];
@@ -48,10 +49,16 @@ function formatMoney(v) {
 }
 
 export default function ExpensesPage() {
+  const { data: queryExpenses = [], isLoading: eLoading } = useExpenses();
+  const { data: queryProperties = [], isLoading: pLoading } = useProperties();
+  const loading = eLoading || pLoading;
+
   const [expenses, setExpenses] = useState([]);
   const [properties, setProperties] = useState([]);
-  const [loading, setLoading] = useState(apiEnabled);
   const [error, setError] = useState("");
+
+  React.useEffect(() => { if (queryExpenses.length > 0) setExpenses(queryExpenses); }, [queryExpenses]);
+  React.useEffect(() => { if (queryProperties.length > 0) setProperties(queryProperties); }, [queryProperties]);
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -79,31 +86,6 @@ export default function ExpensesPage() {
   function closeConfirm() {
     setConfirmState({ open: false, title: "", message: "", tone: "warn", onConfirm: null });
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!apiEnabled) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const [e, p] = await Promise.all([fetchExpenses(), fetchProperties()]);
-        if (cancelled) return;
-        setExpenses(Array.isArray(e) ? e : []);
-        setProperties(Array.isArray(p) ? p : []);
-        setError("");
-      } catch (err) {
-        if (!cancelled) setError(err.message || "读取支出失败");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const propertyOptions = useMemo(() => {
     const rooms = (properties || []).map((p) => {

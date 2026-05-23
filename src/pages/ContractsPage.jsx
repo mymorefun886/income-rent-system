@@ -17,6 +17,7 @@ import {
 } from "../lib/api";
 import { formatCurrency, formatDate } from "../lib/format";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { useContracts, useTenants } from "../hooks/useApiQuery";
 
 const CONTRACT_STATUS = [
   { value: "active", label: "生效中" },
@@ -86,11 +87,18 @@ function buildReminderPayload(contract, tenant, form) {
 }
 
 export default function ContractsPage() {
+  const { data: queryContracts = [], isLoading: cLoading } = useContracts();
+  const { data: queryTenants = [], isLoading: tLoading } = useTenants();
+
   const [contracts, setContracts] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [reminders, setReminders] = useState([]);
-  const [loading, setLoading] = useState(apiEnabled);
+  const [loading, setLoading] = useState(cLoading || tLoading);
   const [error, setError] = useState("");
+
+  React.useEffect(() => { if (queryContracts.length > 0) setContracts(queryContracts); }, [queryContracts]);
+  React.useEffect(() => { if (queryTenants.length > 0) setTenants(queryTenants); }, [queryTenants]);
+  React.useEffect(() => { setLoading(cLoading || tLoading); }, [cLoading, tLoading]);
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dueFilter, setDueFilter] = useState("all");
@@ -110,32 +118,17 @@ export default function ContractsPage() {
     setConfirmState({ open: false, title: "", message: "", onConfirm: null });
   }
 
-  async function load() {
-    if (!apiEnabled) {
-      setLoading(false);
-      setError("未连接后端，合同管理需要后端服务");
-      return;
-    }
-    setLoading(true);
+  async function loadReminders() {
     try {
-      const [contractRows, tenantRows, reminderRows, dueRows] = await Promise.all([fetchContracts(), fetchTenants(), fetchReminders(), fetchContractReminders()]);
+      const [reminderRows, dueRows] = await Promise.all([fetchReminders(), fetchContractReminders()]);
       const autoStatus = await fetchReminderAutoStatus().catch(() => null);
-      setContracts(Array.isArray(contractRows) ? contractRows : []);
-      setTenants(Array.isArray(tenantRows) ? tenantRows : []);
       setReminders(Array.isArray(reminderRows) ? reminderRows : []);
       setContractReminders(Array.isArray(dueRows) ? dueRows : []);
       setAutoReminderStatus(autoStatus);
-      setError("");
-    } catch (e) {
-      setError(e.message || "读取合同数据失败，请检查后端服务");
-    } finally {
-      setLoading(false);
-    }
+    } catch {}
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { loadReminders(); }, []);
 
   const reminderByTenant = useMemo(() => {
     const map = new Map();
@@ -358,7 +351,7 @@ export default function ContractsPage() {
             <p className="mt-1 text-sm text-slate-500">集中管理租约、续租记录、附件链接和到期提醒。</p>
           </div>
           <button className="ui-btn-primary ml-auto" type="button" onClick={openCreate}><Plus className="mr-1 inline h-4 w-4" />新增合同</button>
-          <button className="ui-btn-secondary" type="button" onClick={load}><RefreshCw className="mr-1 inline h-4 w-4" />刷新</button>
+          <button className="ui-btn-secondary" type="button" onClick={loadReminders}><RefreshCw className="mr-1 inline h-4 w-4" />刷新</button>
           <button className="ui-btn-secondary" type="button" onClick={runTodayReminders}><Bell className="mr-1 inline h-4 w-4" />运行今日提醒</button>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-5">
