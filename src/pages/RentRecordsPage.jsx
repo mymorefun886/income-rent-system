@@ -16,6 +16,8 @@ import {
 import { rentRecords as fallbackRecords } from "../lib/mock-data";
 import { formatCurrency, formatDate, getStatusTone } from "../lib/format";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { useProperties, useRecords, useSettings, useTenants } from "../hooks/useApiQuery";
+import { useQueryClient } from "@tanstack/react-query";
 
 const defaultForm = () => ({
   tenant: "",
@@ -160,12 +162,47 @@ function getTenantFeeDefaults(tenant) {
 }
 
 const RentRecordsPage = () => {
-  const [records, setRecords] = useState(apiEnabled ? [] : fallbackRecords);
+  const queryClient = useQueryClient();
+
+  const { data: queryRecords = [], isLoading: rLoading } = useRecords();
+  const { data: queryTenants = [], isLoading: tLoading } = useTenants();
+  const { data: queryProperties = [], isLoading: pLoading } = useProperties();
+  const { data: querySettings } = useSettings({ enabled: apiEnabled });
+  const loading = rLoading || tLoading || pLoading;
+
+  const [records, setRecords] = useState(apiEnabled ? queryRecords : fallbackRecords);
   const [tenants, setTenants] = useState([]);
   const [properties, setProperties] = useState([]);
-  const [loading, setLoading] = useState(apiEnabled);
   const [error, setError] = useState("");
   const [backendHint, setBackendHint] = useState("");
+
+  // Sync query data to local state
+  React.useEffect(() => {
+    if (apiEnabled && queryRecords.length > 0) {
+      setRecords(queryRecords);
+    }
+  }, [queryRecords]);
+
+  React.useEffect(() => {
+    if (apiEnabled && queryTenants.length > 0) {
+      setTenants(queryTenants.filter((x) => !x.archived));
+    }
+  }, [queryTenants]);
+
+  React.useEffect(() => {
+    if (apiEnabled && queryProperties.length > 0) {
+      setProperties(queryProperties);
+    }
+  }, [queryProperties]);
+
+  React.useEffect(() => {
+    const serverQr = String(querySettings?.printPayQrUrl || "").trim();
+    if (serverQr) {
+      localStorage.setItem("income-print-pay-qr", serverQr);
+      setPrintPayQrUrl(serverQr);
+    }
+    setBackendHint("");
+  }, [querySettings]);
 
   const [sheetBuilding, setSheetBuilding] = useState("");
   const [sheetCycle, setSheetCycle] = useState(new Date().toISOString().slice(0, 7));
@@ -198,45 +235,6 @@ const RentRecordsPage = () => {
   const [form, setForm] = useState(defaultForm());
   const [printPayQrUrl, setPrintPayQrUrl] = useState(() => localStorage.getItem("income-print-pay-qr") || "");
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!apiEnabled) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const [r, t, p] = await Promise.all([fetchRecords(), fetchTenants(), fetchProperties()]);
-        let s = null;
-        try {
-          s = await fetchSettings();
-          if (!cancelled) setBackendHint("");
-        } catch {
-          s = null;
-          if (!cancelled) setBackendHint("检测到后端缺少 /api/settings 接口，请重启后端到最新版本。");
-        }
-        if (!cancelled) {
-          setRecords(r || []);
-          setTenants((t || []).filter((x) => !x.archived));
-          setProperties(Array.isArray(p) ? p : []);
-          const serverQr = String(s?.printPayQrUrl || "").trim();
-          if (serverQr) {
-            localStorage.setItem("income-print-pay-qr", serverQr);
-            setPrintPayQrUrl(serverQr);
-          }
-          setError("");
-        }
-      } catch (e) {
-        if (!cancelled) setError(e.message || "读取账单失败");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const totals = useMemo(() => {
     const receivable = records.reduce((s, x) => s + Number(x.receivable || 0), 0);
@@ -770,7 +768,7 @@ const RentRecordsPage = () => {
         autoFilled++;
       }
       // Refresh records
-      const newRecords = await fetchRecords();
+      const newRecords = await queryClient.invalidateQueries({ queryKey: ["records"] }).then(() => fetchRecords());
       setRecords(Array.isArray(newRecords) ? newRecords : []);
       const msg = `导入完成：更新 ${updated} 条，新建 ${created} 条`;
       setError(autoFilled > 0 ? msg + `，自动补全 ${autoFilled} 条租金账单` : msg);

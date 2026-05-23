@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useMemo, useState } from "react";
 import { ClipboardList, DoorClosed, FileClock, Wallet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,8 +14,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { apiEnabled, fetchDashboard, fetchExpenses, fetchProperties, fetchRecords, fetchTenants } from "../lib/api";
 import { formatCurrency } from "../lib/format";
+import { useDashboard, useExpenses, useProperties, useRecords, useTenants } from "../hooks/useApiQuery";
 
 const donutColors = ["#7da2ea", "#d1d5db"];
 
@@ -53,45 +53,14 @@ function aggregateTrend(records, expenses) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(apiEnabled);
-  const [dashboardStats, setDashboardStats] = useState(null);
-  const [properties, setProperties] = useState([]);
-  const [tenants, setTenants] = useState([]);
-  const [records, setRecords] = useState([]);
-  const [expenses, setExpenses] = useState([]);
   const [showAudit, setShowAudit] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!apiEnabled) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const [dashboard, p, t, r, e] = await Promise.all([
-          fetchDashboard(),
-          fetchProperties(),
-          fetchTenants(),
-          fetchRecords(),
-          fetchExpenses(),
-        ]);
-        if (!cancelled) {
-          setDashboardStats(dashboard || null);
-          setProperties(Array.isArray(p) ? p : []);
-          setTenants(Array.isArray(t) ? t : []);
-          setRecords(Array.isArray(r) ? r : []);
-          setExpenses(Array.isArray(e) ? e : []);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data: dashboardStats = null, isLoading: dLoading } = useDashboard();
+  const { data: properties = [], isLoading: pLoading } = useProperties();
+  const { data: tenants = [], isLoading: tLoading } = useTenants();
+  const { data: records = [], isLoading: rLoading } = useRecords();
+  const { data: expenses = [], isLoading: eLoading } = useExpenses();
+  const loading = dLoading || pLoading || tLoading || rLoading || eLoading;
 
   const activeTenants = useMemo(() => tenants.filter((item) => !item.archived), [tenants]);
   const occupiedRooms = useMemo(() => new Set(activeTenants.map((item) => String(item.room || ""))), [activeTenants]);

@@ -1,5 +1,8 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { Edit3, Plus, RefreshCw, Trash2, Users, UserX, X, ZoomIn } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   API_BASE_URL,
   apiEnabled,
@@ -210,6 +213,36 @@ function toForm(tenant) {
   };
 }
 
+const tenantSchema = z.object({
+  name: z.string().min(1, "请输入租客姓名"),
+  phone: z.string().regex(/^1\d{10}$/, "手机号格式不正确（11位数字）").or(z.literal("")),
+  idNo: z.string().optional(),
+  building: z.string(),
+  room: z.string(),
+  leaseStart: z.string(),
+  leaseEnd: z.string(),
+  rent: z.string(),
+  deposit: z.string(),
+  wechatRemark: z.string(),
+  wechatGroupName: z.string(),
+  notes: z.string(),
+});
+
+const tenantFormDefaults = {
+  name: "",
+  phone: "",
+  idNo: "",
+  building: "",
+  room: "",
+  leaseStart: new Date().toISOString().slice(0, 10),
+  leaseEnd: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().slice(0, 10),
+  rent: "0",
+  deposit: "0",
+  wechatRemark: "",
+  wechatGroupName: "",
+  notes: "",
+};
+
 export default function TenantsPage() {
   const [activeTab, setActiveTab] = useState("current");
   const [searchTerm, setSearchTerm] = useState("");
@@ -221,7 +254,25 @@ export default function TenantsPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTenant, setEditingTenant] = useState(null);
-  const [form, setForm] = useState(makeForm());
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    getValues,
+    watch,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(tenantSchema),
+    defaultValues: tenantFormDefaults,
+  });
+  const formWatch = watch();
+  const form = { ...formWatch, idCardFront: idCardFront, idCardBack: idCardBack, feeItems };
+
+  const [idCardFront, setIdCardFront] = useState("");
+  const [idCardBack, setIdCardBack] = useState("");
+  const [feeItems, setFeeItems] = useState(defaultFeeItems());
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
@@ -300,13 +351,33 @@ export default function TenantsPage() {
 
   function openCreate() {
     setEditingTenant(null);
-    setForm(makeForm());
+    reset(tenantFormDefaults);
+    setIdCardFront("");
+    setIdCardBack("");
+    setFeeItems(defaultFeeItems());
     setModalOpen(true);
   }
 
   function openEdit(tenant) {
     setEditingTenant(tenant);
-    setForm(toForm(tenant));
+    const f = toForm(tenant);
+    reset({
+      name: f.name,
+      phone: f.phone,
+      idNo: f.idNo,
+      building: f.building,
+      room: f.room,
+      leaseStart: f.leaseStart,
+      leaseEnd: f.leaseEnd,
+      rent: f.rent,
+      deposit: f.deposit,
+      wechatRemark: f.wechatRemark,
+      wechatGroupName: f.wechatGroupName,
+      notes: f.notes,
+    });
+    setIdCardFront(tenant.idCardFront || "");
+    setIdCardBack(tenant.idCardBack || "");
+    setFeeItems(f.feeItems);
     setModalOpen(true);
   }
 
@@ -320,29 +391,24 @@ export default function TenantsPage() {
   function onRoomSelect(value) {
     const found = vacantRoomOptions.find((x) => `${x.building} ${x.room}` === value);
     if (!found) return;
-    setForm((prev) => ({ ...prev, building: found.building, room: found.room }));
+    setValue("building", found.building);
+    setValue("room", found.room);
   }
 
   function addFeeItem() {
-    setForm((prev) => ({
-      ...prev,
-      feeItems: [...(prev.feeItems || []), { id: `fee-${Date.now()}`, name: "其他费用", billingMode: "固定费用", unitPrice: "0", unit: "元/月", initialReading: "0", hasMinimum: false, minimumCharge: "0" }],
-    }));
+    setFeeItems((prev) => [...prev, { id: `fee-${Date.now()}`, name: "其他费用", billingMode: "固定费用", unitPrice: "0", unit: "元/月", initialReading: "0", hasMinimum: false, minimumCharge: "0" }]);
   }
 
   function updateFeeItem(id, patch) {
-    setForm((prev) => ({
-      ...prev,
-      feeItems: (prev.feeItems || []).map((f) => {
-        if (f.id !== id) return f;
-        if (patch.name) return applyFeePreset({ ...f, ...patch }, patch.name);
-        return { ...f, ...patch };
-      }),
+    setFeeItems((prev) => prev.map((f) => {
+      if (f.id !== id) return f;
+      if (patch.name) return applyFeePreset({ ...f, ...patch }, patch.name);
+      return { ...f, ...patch };
     }));
   }
 
   function removeFeeItem(id) {
-    setForm((prev) => ({ ...prev, feeItems: (prev.feeItems || []).filter((f) => f.id !== id) }));
+    setFeeItems((prev) => prev.filter((f) => f.id !== id));
   }
 
   async function doUpload(file, side) {
@@ -351,7 +417,8 @@ export default function TenantsPage() {
     setUploadError("");
     try {
       const uploaded = await uploadFile(file);
-      setForm((prev) => ({ ...prev, [side]: uploaded.url }));
+      if (side === "idCardFront") setIdCardFront(uploaded.url);
+      else setIdCardBack(uploaded.url);
       setUploadingSide(null);
       setError("");
     } catch (e) {
@@ -362,7 +429,8 @@ export default function TenantsPage() {
   }
 
   function handleTenantIdUpload(file, side) {
-    if (form[side]) {
+    const currentUrl = side === "idCardFront" ? idCardFront : idCardBack;
+    if (currentUrl) {
       // 已有照片 → 弹窗确认是否替换
       setPendingUpload({ file, side });
       return;
@@ -372,19 +440,22 @@ export default function TenantsPage() {
 
   function confirmRemovePhoto() {
     if (!pendingRemoveSide) return;
-    setForm((prev) => ({ ...prev, [pendingRemoveSide]: "" }));
+    if (pendingRemoveSide === "idCardFront") setIdCardFront("");
+    else setIdCardBack("");
     setPendingRemoveSide(null);
   }
 
-  async function saveTenant() {
+  const handleSave = handleSubmit(async (data) => {
     try {
       const payload = {
         ...(editingTenant || {}),
-        ...form,
-        rent: Number(form.rent || 0),
-        deposit: Number(form.deposit || 0),
+        ...data,
+        idCardFront,
+        idCardBack,
+        rent: Number(data.rent || 0),
+        deposit: Number(data.deposit || 0),
         archived: false,
-        feeItems: (form.feeItems || []).map((f) => ({
+        feeItems: feeItems.map((f) => ({
           ...f,
           unitPrice: Number(f.unitPrice || 0),
           initialReading: Number(f.initialReading || 0),
@@ -403,7 +474,7 @@ export default function TenantsPage() {
     } catch (e) {
       setError(e.message || "保存租客失败");
     }
-  }
+  });
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -508,9 +579,13 @@ export default function TenantsPage() {
           <div className="my-4 w-full max-w-3xl rounded-2xl bg-white p-5 max-h-[92vh] overflow-y-auto">
             <h3 className="text-xl font-semibold">{editingTenant ? "编辑租客" : "新增租客"}</h3>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="text-sm">租客姓名<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></label>
-              <label className="text-sm">电话号码<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></label>
-              <label className="text-sm">身份证<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.idNo} onChange={(e) => setForm((p) => ({ ...p, idNo: e.target.value }))} /></label>
+              <label className="text-sm">租客姓名<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("name")} />
+                {errors.name && <p className="text-xs text-rose-500 mt-0.5">{errors.name.message}</p>}
+              </label>
+              <label className="text-sm">电话号码<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("phone")} />
+                {errors.phone && <p className="text-xs text-rose-500 mt-0.5">{errors.phone.message}</p>}
+              </label>
+              <label className="text-sm">身份证<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("idNo")} /></label>
               <label className="text-sm">入住房号
                 <select className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.room ? `${form.building} ${form.room}` : ""} onChange={(e) => onRoomSelect(e.target.value)}>
                   <option value="">请选择空置房号</option>
@@ -523,7 +598,7 @@ export default function TenantsPage() {
                   <IdPhotoCard
                     label="身份证正面"
                     side="idCardFront"
-                    url={form.idCardFront}
+                    url={idCardFront}
                     onUpload={handleTenantIdUpload}
                     onPreview={setPreviewImage}
                     onRemove={() => setPendingRemoveSide("idCardFront")}
@@ -533,7 +608,7 @@ export default function TenantsPage() {
                   <IdPhotoCard
                     label="身份证反面"
                     side="idCardBack"
-                    url={form.idCardBack}
+                    url={idCardBack}
                     onUpload={handleTenantIdUpload}
                     onPreview={setPreviewImage}
                     onRemove={() => setPendingRemoveSide("idCardBack")}
@@ -542,14 +617,14 @@ export default function TenantsPage() {
                   />
                 </div>
               </div>
-              <label className="text-sm">租期开始<input type="date" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.leaseStart} onChange={(e) => setForm((p) => ({ ...p, leaseStart: e.target.value }))} /></label>
-              <label className="text-sm">租期结束<input type="date" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.leaseEnd} onChange={(e) => setForm((p) => ({ ...p, leaseEnd: e.target.value }))} /></label>
-              <div className="md:col-span-2 flex flex-wrap gap-2">{quickLeaseButtons.map((btn) => <button key={btn.label} className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700" type="button" onClick={() => setForm((p) => ({ ...p, leaseEnd: addMonths(p.leaseStart, btn.months) }))}>{btn.label}</button>)}</div>
-              <label className="text-sm">每期租金<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.rent} onChange={(e) => setForm((p) => ({ ...p, rent: e.target.value }))} /></label>
-              <label className="text-sm">押金<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.deposit} onChange={(e) => setForm((p) => ({ ...p, deposit: e.target.value }))} /></label>
-              <label className="text-sm">微信备注<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.wechatRemark} onChange={(e) => setForm((p) => ({ ...p, wechatRemark: e.target.value }))} /></label>
-              <label className="text-sm">微信群名<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.wechatGroupName} onChange={(e) => setForm((p) => ({ ...p, wechatGroupName: e.target.value }))} /></label>
-              <label className="text-sm md:col-span-2">备注<textarea className="mt-1 min-h-24 w-full rounded-xl border border-slate-300 px-3 py-2" value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} /></label>
+              <label className="text-sm">租期开始<input type="date" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("leaseStart")} /></label>
+              <label className="text-sm">租期结束<input type="date" className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("leaseEnd")} /></label>
+              <div className="md:col-span-2 flex flex-wrap gap-2">{quickLeaseButtons.map((btn) => <button key={btn.label} className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700" type="button" onClick={() => setValue("leaseEnd", addMonths(getValues("leaseStart"), btn.months))}>{btn.label}</button>)}</div>
+              <label className="text-sm">每期租金<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("rent")} /></label>
+              <label className="text-sm">押金<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("deposit")} /></label>
+              <label className="text-sm">微信备注<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("wechatRemark")} /></label>
+              <label className="text-sm">微信群名<input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("wechatGroupName")} /></label>
+              <label className="text-sm md:col-span-2">备注<textarea className="mt-1 min-h-24 w-full rounded-xl border border-slate-300 px-3 py-2" {...register("notes")} /></label>
 
               <div className="md:col-span-2">
                 <div className="mb-2 flex items-center justify-between">
@@ -557,7 +632,7 @@ export default function TenantsPage() {
                   <button className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs text-slate-700" type="button" onClick={addFeeItem}>新增费用项</button>
                 </div>
                 <div className="space-y-2">
-                  {(form.feeItems || []).map((fee) => (
+                  {feeItems.map((fee) => (
                     <div key={fee.id} className="grid gap-2 rounded-xl bg-slate-50 p-3 md:grid-cols-[1.1fr_1fr_1fr_1fr_1fr_auto]">
                       <select className="rounded-lg border border-slate-300 px-2 py-2 text-sm" value={fee.name} onChange={(e) => updateFeeItem(fee.id, { name: e.target.value })}>
                         {feeNameOptions.map((x) => <option key={x}>{x}</option>)}
@@ -578,7 +653,7 @@ export default function TenantsPage() {
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button className="rounded-xl border border-slate-300 px-3 py-2" type="button" onClick={closeModal}>取消</button>
-              <button className="rounded-xl bg-blue-600 px-3 py-2 text-white" type="button" onClick={saveTenant}>保存</button>
+              <button className="rounded-xl bg-blue-600 px-3 py-2 text-white disabled:opacity-50" type="button" onClick={handleSave}>保存</button>
             </div>
           </div>
         </div>

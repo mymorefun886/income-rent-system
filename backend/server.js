@@ -2045,7 +2045,12 @@ const server = http.createServer(async (request, response) => {
   }
 
   const url = new URL(request.url, `http://${request.headers.host}`);
-  const pathname = url.pathname;
+  let pathname = url.pathname;
+
+  // /api/v1/* → /api/* 兼容路由（为未来版本留空间）
+  if (pathname.startsWith("/api/v1/")) {
+    pathname = pathname.replace("/v1", "");
+  }
   const db = readDb();
   ensureDbCollections(db);
   db.tenants = db.tenants.map(upsertTenantWechatFields);
