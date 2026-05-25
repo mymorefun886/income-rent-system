@@ -27,6 +27,7 @@ export interface RecordForm {
   depositAdjustment: string;
   paidAt?: string;
   noWaterMeter?: boolean;
+  tenantStartDate?: string; // 租客入住日期，用于判断首月免水底费
   [key: string]: unknown;
 }
 
@@ -91,6 +92,15 @@ export function isFactoryRoom(formLike: RecordForm | null | undefined): boolean 
   return Boolean(formLike?.noWaterMeter);
 }
 
+/** 判断账单周期是否为租客入住首月 */
+export function isFirstMonth(formLike: RecordForm | null | undefined): boolean {
+  const startDate = formLike?.tenantStartDate;
+  if (!startDate) return false;
+  const startCycle = startDate.slice(0, 7); // "YYYY-MM"
+  const billCycle = formLike.cycle?.slice(0, 7) || "";
+  return startCycle === billCycle;
+}
+
 export function applyMeterAutoFields(formLike: RecordForm, prevWaterMinimum?: string | number): RecordForm {
   const next = { ...formLike };
   const ePrev = Number(next.electricPrev || 0);
@@ -105,9 +115,12 @@ export function applyMeterAutoFields(formLike: RecordForm, prevWaterMinimum?: st
   next.electricUsage = String(Number.isFinite(eUsage) ? eUsage : 0);
   next.waterUsage = String(Number.isFinite(wUsage) ? wUsage : 0);
   const disableMinimum = isFactoryRoom(next);
-  // Preserve user-edited waterMinimumCharge if provided, otherwise auto-calculate
+  const isFirst = isFirstMonth(next);
+  // 首月免水底，或用户已手动编辑过，取用户值；否则自动计算
   if (prevWaterMinimum !== undefined) {
     next.waterMinimumCharge = String(prevWaterMinimum);
+  } else if (isFirst) {
+    next.waterMinimumCharge = "0";
   } else {
     next.waterMinimumCharge = String(disableMinimum ? 0 : (wUsage < 1 ? Math.round(((1 - wUsage) * (Number.isFinite(wPrice) ? wPrice : 0)) * 100) / 100 : 0));
   }
