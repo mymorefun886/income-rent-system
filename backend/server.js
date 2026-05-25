@@ -2241,7 +2241,15 @@ const server = http.createServer(async (request, response) => {
       clearLoginFailures(ip);
       const token = mintSessionToken(safeUsername);
       addAuditLog(db, "auth.login.success", { username: safeUsername, ip: toMaskedIp(ip) }, safeUsername || "admin");
+      // P1-3: 清除 HttpOnly Cookie
+      response.setHeader("Set-Cookie", [
+        `income-session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
+      ]);
       writeDb(db);
+      // P1-3: HttpOnly Cookie (新登入)
+      response.setHeader("Set-Cookie", [
+        `income-session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${7 * 24 * 60 * 60}`,
+      ]);
       return sendJson(response, 200, {
         success: true,
         token,
@@ -2258,6 +2266,18 @@ const server = http.createServer(async (request, response) => {
       return sendJson(response, 403, { success: false, message: "当前账号为只读权限，禁止修改数据" });
     }
   }
+  if (request.method === "GET" && pathname === "/api/auth/me") {
+    // P1-3: 從 HttpOnly Cookie 恢復 session，返回用戶信息
+    if (!isAuthed(request)) return sendJson(response, 401, { success: false, message: "未登录或登录已过期" });
+    const token = getAuthToken(request);
+    const session = authSessions.get(token);
+    return sendJson(response, 200, ok({
+      token,
+      user: db.user,
+      username: session?.username || "",
+    }));
+  }
+
   if (request.method === "GET" && pathname === "/api/security/status") {
     const role = String(db.user?.role || "");
     return sendJson(

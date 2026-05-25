@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { apiEnabled, apiLogin } from "../lib/api";
+import { apiEnabled, apiLogin, fetchMe } from "../lib/api";
 import { demoUser, loginGuide } from "../lib/mock-data";
 
 const AuthContext = createContext();
@@ -22,15 +22,32 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const storedUser = localStorage.getItem(USER_KEY);
-
-    if (token && storedUser) {
-      setIsAuthenticated(true);
-      setUser(JSON.parse(storedUser));
+    // P1-3: 優先從 HttpOnly Cookie 恢復 session
+    if (apiEnabled) {
+      fetchMe()
+        .then((me) => {
+          setUser(me.user || null);
+          setIsAuthenticated(true);
+        })
+        .catch(() => {
+          // Cookie 無效，嘗試 localStorage fallback
+          const token = localStorage.getItem(TOKEN_KEY);
+          const storedUser = localStorage.getItem(USER_KEY);
+          if (token && storedUser) {
+            setUser(JSON.parse(storedUser));
+            setIsAuthenticated(true);
+          }
+        })
+        .finally(() => setLoading(false));
+    } else {
+      const token = localStorage.getItem(TOKEN_KEY);
+      const storedUser = localStorage.getItem(USER_KEY);
+      if (token && storedUser) {
+        setIsAuthenticated(true);
+        setUser(JSON.parse(storedUser));
+      }
+      setLoading(false);
     }
-
-    setLoading(false);
   }, []);
 
   const login = async (username, password) => {

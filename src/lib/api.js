@@ -8,8 +8,16 @@ export const API_BASE_URL = apiBaseUrl;
 
 export const apiEnabled = Boolean(apiBaseUrl);
 
+// P1-3: 讀取 HttpOnly Cookie 中的 session token
+function getCookieToken() {
+  if (typeof document === "undefined") return "";
+  const match = document.cookie.match(/(?:^|;\s*)income-session=([^;]*)/);
+  return match ? match[1] : "";
+}
+
 function getHeaders(extraHeaders = {}) {
-  const token = localStorage.getItem("income-local-token");
+  // 優先讀取 HttpOnly Cookie，fallback 到 localStorage
+  const token = getCookieToken() || localStorage.getItem("income-local-token") || "";
 
   return {
     "Content-Type": "application/json",
@@ -380,4 +388,9 @@ export async function updateSettings(payload) {
     method: "PUT",
     body: JSON.stringify(payload || {}),
   });
+}
+
+// P1-3: 從 HttpOnly Cookie 恢復 session
+export async function fetchMe() {
+  return request("/api/auth/me");
 }
