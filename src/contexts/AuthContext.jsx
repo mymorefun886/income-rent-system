@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { apiEnabled, apiLogin, fetchMe, setAuthToken } from "../lib/api";
+import { apiEnabled, apiLogin, fetchMe, setAuthToken, getStoredUser, setStoredUser } from "../lib/api";
 import { demoUser, loginGuide } from "../lib/mock-data";
 
 const AuthContext = createContext();
@@ -20,17 +20,27 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // P1-3: 優先從 HttpOnly Cookie 恢復 session
+    // 先從 sessionStorage 恢復 session（秒開，不需網路）
+    const storedUser = getStoredUser();
+    if (storedUser) {
+      setUser(storedUser);
+      setIsAuthenticated(true);
+    }
+    // 背景透過 API 驗證 session 是否仍然有效
     if (apiEnabled) {
       fetchMe()
         .then((me) => {
-          setUser(me.user || null);
-          setIsAuthenticated(true);
+          if (me.user) {
+            setUser(me.user);
+            setStoredUser(me.user);
+            setIsAuthenticated(true);
+          }
         })
-        .catch(() => { /* localStorage fallback removed per P1-1 */ })
+        .catch(() => {
+          // fetchMe 失敗不影響已恢復的 session（NAS 後端可能無此端點）
+        })
         .finally(() => setLoading(false));
     } else {
-      /* localStorage fallback removed per P1-1 */
       setLoading(false);
     }
   }, []);
@@ -65,9 +75,12 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
-      // 儲存 token 供後續 API 請求使用
+      // 儲存 token 和 user 供後續 API 請求及頁面重整恢復使用
       if (authPayload.token) {
         setAuthToken(authPayload.token);
+      }
+      if (authPayload.user) {
+        setStoredUser(authPayload.user);
       }
       setIsAuthenticated(true);
       setUser(authPayload.user);
@@ -83,6 +96,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setAuthToken("");
+    setStoredUser(null);
     setIsAuthenticated(false);
     setUser(null);
   };

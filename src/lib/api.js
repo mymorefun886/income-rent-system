@@ -25,6 +25,25 @@ export function setAuthToken(token) {
   } catch {}
 }
 
+const USER_KEY = "income-session-user";
+
+export function getStoredUser() {
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      const raw = sessionStorage.getItem(USER_KEY);
+      if (raw) return JSON.parse(raw);
+    }
+  } catch {}
+  return null;
+}
+
+export function setStoredUser(user) {
+  try {
+    if (user) sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+    else sessionStorage.removeItem(USER_KEY);
+  } catch {}
+}
+
 function getHeaders(extraHeaders = {}) {
   return {
     "Content-Type": "application/json",
