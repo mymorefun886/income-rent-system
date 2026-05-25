@@ -37,6 +37,7 @@ const uploadMaxMb = Number(process.env.UPLOAD_MAX_MB || 10);
 const backupDir = process.env.BACKUP_DIR || path.join(storageDir, "backups");
 const loginMaxAttempts = Number(process.env.LOGIN_MAX_ATTEMPTS || 8);
 const loginLockMinutes = Number(process.env.LOGIN_LOCK_MINUTES || 15);
+const MAX_BODY_SIZE = Number(process.env.MAX_BODY_SIZE || 1_000_000); // P1-4: 防止超大請求體
 // ── P0-2: ADMIN_PASSWORD_HASH 在啟動時讀取一次，全域可見 ──
 const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH || "";
 
@@ -207,16 +208,26 @@ function parseBody(request) {
     let raw = "";
     request.on("data", (chunk) => {
       raw += chunk.toString();
+      // P1-4: 拒绝超大的请求体，防止内存耗尽
+      if (raw.length > MAX_BODY_SIZE) {
+        request.destroy();
+      }
     });
     request.on("end", () => {
       if (!raw) return resolve({});
+      // P1-4: 超出大小限制则返回 413
+      if (raw.length > MAX_BODY_SIZE) {
+        request.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
       try {
         resolve(JSON.parse(raw));
       } catch (err) {
         reject(err);
       }
     });
-    request.on("error", reject);
+    request.on("error", (err) => reject(err || new Error("Request error")));
   });
 }
 
@@ -2214,15 +2225,22 @@ const server = http.createServer(async (request, response) => {
       const ip = getClientIp(request);
       if (isLoginLocked(ip)) return sendJson(response, 429, { success: false, message: "登录失败次数过多，请稍后再试" });
       const body = await parseBody(request);
-      if (body.username !== username || !verifyPassword(String(body.password || ""))) {
+      // P1-7: 輸入淨化
+      const safeUsername = String(body.username || "").trim().slice(0, 64);
+      const safePassword  = String(body.password  || "").slice(0, 128);
+      // P1-6: 密碼最短長度
+      if (safePassword.length < 6) {
+        return sendJson(response, 400, { success: false, message: "密码长度至少6位" });
+      }
+      if (safeUsername !== username || !verifyPassword(safePassword)) {
         registerLoginFailure(ip);
-        addAuditLog(db, "auth.login.failed", { username: body.username || "", ip: toMaskedIp(ip) }, "anonymous");
+        addAuditLog(db, "auth.login.failed", { username: safeUsername, ip: toMaskedIp(ip) }, "anonymous");
         writeDb(db);
         return sendJson(response, 401, { success: false, message: "用户名或密码错误" });
       }
       clearLoginFailures(ip);
-      const token = mintSessionToken(body.username);
-      addAuditLog(db, "auth.login.success", { username: body.username || "", ip: toMaskedIp(ip) }, body.username || "admin");
+      const token = mintSessionToken(safeUsername);
+      addAuditLog(db, "auth.login.success", { username: safeUsername, ip: toMaskedIp(ip) }, safeUsername || "admin");
       writeDb(db);
       return sendJson(response, 200, {
         success: true,
