@@ -7,6 +7,8 @@
     "start": "node server.js",
     "gen:password-hash": "node scripts/gen-password-hash.mjs",
     "normalize:import": "node scripts/normalize-import-file.mjs",
-    "reconcile:room-keys": "node scripts/reconcile-room-keys.mjs"
+    "reconcile:room-keys": "node scripts/reconcile-room-keys.mjs",
+    "test": "vitest",
+    "test:run": "vitest run"
   }
 }

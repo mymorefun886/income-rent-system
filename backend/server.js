@@ -165,7 +165,7 @@ function sendJson(response, statusCode, payload) {
   const reqOrigin = String(response.req?.headers?.origin || "");
   const originAllowed =
     apiAllowedOrigins.includes("*") ||
-    (reqOrigin && apiAllowedOrigins.some((allowed) => reqOrigin === allowed || reqOrigin.endsWith(allowed)));
+    (reqOrigin && apiAllowedOrigins.some((allowed) => reqOrigin === allowed));
   const finalOrigin = originAllowed ? reqOrigin || appOrigin : appOrigin;
   const headers = {
     // CORS
@@ -2094,7 +2094,7 @@ const server = http.createServer(async (request, response) => {
     const reqOrigin = String(request.headers.origin || "");
     const originAllowed =
       apiAllowedOrigins.includes("*") ||
-      (reqOrigin && apiAllowedOrigins.some((allowed) => reqOrigin === allowed || reqOrigin.endsWith(allowed)));
+      (reqOrigin && apiAllowedOrigins.some((allowed) => reqOrigin === allowed));
     const finalOrigin = originAllowed ? reqOrigin || appOrigin : appOrigin;
     response.writeHead(204, {
       "Access-Control-Allow-Origin": finalOrigin,
@@ -2248,11 +2248,11 @@ const server = http.createServer(async (request, response) => {
       writeDb(db);
       // P1-3: HttpOnly Cookie (新登入)
       response.setHeader("Set-Cookie", [
-        `income-session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${7 * 24 * 60 * 60}`,
+        `income-session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${7 * 24 * 60 * 60}`,
       ]);
+      // P1-2: token only sent via HttpOnly cookie, not in response body
       return sendJson(response, 200, {
         success: true,
-        token,
         user: db.user,
       });
     } catch {
@@ -2260,7 +2260,16 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
-  if (pathname.startsWith("/api/") && pathname !== "/api/health" && pathname !== "/api/auth/login" && pathname !== "/api/meter-data") {
+
+  // P1-3: POST /api/auth/logout - 清除 HttpOnly Cookie
+  if (request.method === "POST" && pathname === "/api/auth/logout") {
+    response.setHeader("Set-Cookie", [
+      "income-session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0",
+    ]);
+    return sendJson(response, 200, { success: true, message: "已退出登录" });
+  }
+
+  if (pathname.startsWith("/api/") && pathname !== "/api/health" && pathname !== "/api/auth/login" && pathname !== "/api/auth/logout" && pathname !== "/api/meter-data") {
     if (!isAuthed(request)) return sendJson(response, 401, { success: false, message: "未登录或登录已过期" });
     if (request.method !== "GET" && pathname !== "/api/security/role-switch" && isReadOnlyRole(db.user?.role || "")) {
       return sendJson(response, 403, { success: false, message: "当前账号为只读权限，禁止修改数据" });
@@ -2510,7 +2519,7 @@ const server = http.createServer(async (request, response) => {
     });
     const csv = [head, ...body].map((line) => line.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     const reqOrigin = String(request.headers.origin || "");
-    const originAllowed = apiAllowedOrigins.includes("*") || (reqOrigin && apiAllowedOrigins.some((allowed) => reqOrigin === allowed || reqOrigin.endsWith(allowed)));
+    const originAllowed = apiAllowedOrigins.includes("*") || (reqOrigin && apiAllowedOrigins.some((allowed) => reqOrigin === allowed));
     const finalOrigin = originAllowed ? reqOrigin || appOrigin : appOrigin;
     response.writeHead(200, {
       "Access-Control-Allow-Origin": finalOrigin,
@@ -4044,12 +4053,18 @@ async function runAutomationSchedulerTick() {
   }
 }
 
-server.listen(port, host, () => {
-  writeRuntimeLog("info", "server.started", { host, port });
-  runAutomationSchedulerTick();
-  setInterval(runAutomationSchedulerTick, 5 * 60 * 1000);
-  console.log(`income-local-api listening on http://${host}:${port}`);
-});
+// 僅在直接執行時啟動伺服器（非 module import 模式）
+const isMain = import.meta.url === fileURLToPath(import.meta.url);
+if (isMain) {
+  server.listen(port, host, () => {
+    writeRuntimeLog("info", "server.started", { host, port });
+    runAutomationSchedulerTick();
+    setInterval(runAutomationSchedulerTick, 5 * 60 * 1000);
+    console.log(`income-local-api listening on http://${host}:${port}`);
+  });
+}
+
+export { server };
 
 process.on("uncaughtException", (err) => {
   writeRuntimeLog("error", "process.uncaughtException", {
