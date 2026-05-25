@@ -4,6 +4,36 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
+import { z } from "zod";
+
+// ── DB Schema 驗證 (基本結構，非嚴格模式以向後相容) ──
+const dbSchema = z.object({
+  user: z.object({
+    id: z.string(),
+    username: z.string(),
+    name: z.string().optional(),
+    role: z.string().optional(),
+    portfolio: z.string().optional(),
+  }).passthrough(),
+  properties: z.array(z.record(z.unknown())).default([]),
+  tenants: z.array(z.record(z.unknown())).default([]),
+  records: z.array(z.record(z.unknown())).default([]),
+  expenses: z.array(z.record(z.unknown())).default([]),
+  contracts: z.array(z.record(z.unknown())).default([]),
+  reminders: z.array(z.record(z.unknown())).default([]),
+  roomInventories: z.array(z.record(z.unknown())).default([]),
+  roomInventorySnapshots: z.array(z.record(z.unknown())).default([]),
+  workOrders: z.array(z.record(z.unknown())).default([]),
+  uploads: z.array(z.record(z.unknown())).default([]),
+  meterTasks: z.array(z.record(z.unknown())).default([]),
+  messageLogs: z.array(z.record(z.unknown())).default([]),
+  auditLogs: z.array(z.record(z.unknown())).default([]),
+  entityVersions: z.array(z.record(z.unknown())).default([]),
+  importReports: z.array(z.record(z.unknown())).default([]),
+  runtimeLogs: z.array(z.record(z.unknown())).default([]),
+  profitAlerts: z.array(z.record(z.unknown())).default([]),
+  settings: z.record(z.unknown()).default({}),
+}).passthrough();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,6 +89,35 @@ console.log("================================\n");
 
 const authSessions = new Map();
 const loginAttempts = new Map();
+const sessionsPath = path.join(storageDir, "sessions.json");
+
+// 啟動時恢復 persistent sessions
+function loadSessions() {
+  try {
+    if (existsSync(sessionsPath)) {
+      const raw = readFileSync(sessionsPath, "utf8");
+      const data = JSON.parse(raw);
+      if (Array.isArray(data)) {
+        const now = Date.now();
+        for (const s of data) {
+          if (s.token && s.expiresAt > now) {
+            authSessions.set(s.token, { username: s.username, createdAt: s.createdAt, expiresAt: s.expiresAt });
+          }
+        }
+      }
+    }
+  } catch { /* sessions file may be corrupt, start fresh */ }
+}
+
+function saveSessions() {
+  try {
+    const data = [];
+    for (const [token, s] of authSessions) {
+      data.push({ token, username: s.username, createdAt: s.createdAt, expiresAt: s.expiresAt });
+    }
+    writeFileSync(sessionsPath, JSON.stringify(data), "utf8");
+  } catch { /* ignore write errors */ }
+}
 
 // ── P1-1: 速率限制（Sliding Window） ──
 const RATE_WINDOW_MS  = Number(process.env.RATE_LIMIT_WINDOW_MS  || 60_000);
@@ -167,11 +226,15 @@ function readDb() {
     }
     const raw = readFileSync(dbPath, "utf8");
     const safe = typeof raw === "string" ? raw.replace(/^\uFEFF/, "") : raw;
-    dbCache = JSON.parse(safe);
+    const parsed = dbSchema.parse(JSON.parse(safe));
+    dbCache = parsed;
     dbCacheMtime = stat.mtimeMs;
     return dbCache;
   } catch (e) {
-    // \u6A94\u6848\u640D\u58DE\u6642\u5617\u8A66\u5F9E .tmp \u6062\u5FA9
+    // zod \u9A57\u8B49\u5931\u6557\u6216\u6A94\u6848\u640D\u58DE\u6642\u5617\u8A66\u5F9E .tmp \u6062\u5FA9
+    if (e instanceof z.ZodError) {
+      writeRuntimeLog("warn", "db.schema_invalid", { issues: e.issues.slice(0, 5) });
+    }
     const tmpPath = dbPath + ".tmp";
     if (existsSync(tmpPath)) {
       try {
@@ -189,13 +252,13 @@ function readDb() {
 }
 
 function writeDb(data) {
-  // \u539F\u5B50\u5BEB\u5165\uFF1A\u5148\u5BEB .tmp\uFF0C\u518D rename\uFF08\u540C\u6A94\u6848\u7CFB\u7D71\u4E0A\u70BA\u539F\u5B50\u64CD\u4F5C\uFF09
+  // \u5BEB\u5165\u524D\u9A57\u8B49 schema
+  const validated = dbSchema.parse(data);
   const tmpPath = dbPath + ".tmp";
-  const json = JSON.stringify(data, null, 2);
+  const json = JSON.stringify(validated, null, 2);
   writeFileSync(tmpPath, json, "utf8");
   renameSync(tmpPath, dbPath);
-  // \u66F4\u65B0\u8A18\u61B6\u9AD4\u5FEB\u53D6
-  dbCache = data;
+  dbCache = validated;
   dbCacheMtime = statSync(dbPath).mtimeMs;
 }
 
@@ -436,6 +499,7 @@ function mintSessionToken(userName) {
     createdAt: Date.now(),
     expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 7,
   });
+  saveSessions();
   return token;
 }
 
@@ -455,6 +519,22 @@ function isAuthed(request) {
     return false;
   }
   return true;
+}
+
+// 每 30 分鐘清理過期 session 並持久化
+let sessionCleanupTimer = null;
+function startSessionCleanup() {
+  if (sessionCleanupTimer) return;
+  sessionCleanupTimer = setInterval(() => {
+    let changed = false;
+    for (const [token, s] of authSessions) {
+      if (s.expiresAt < Date.now()) {
+        authSessions.delete(token);
+        changed = true;
+      }
+    }
+    if (changed) saveSessions();
+  }, 30 * 60 * 1000);
 }
 
 function safeFilename(filename = "") {
@@ -2242,18 +2322,35 @@ async function handler(request, response) {
   }
 
   if (request.method === "GET" && pathname === "/api/health") {
+    const dbOk = existsSync(dbPath);
+    const dbSize = dbOk ? statSync(dbPath).size : 0;
+    const uptime = process.uptime();
+    const mem = process.memoryUsage();
     return sendJson(
       response,
       200,
       ok({
-        status: "ok",
+        status: dbOk ? "ok" : "degraded",
         timestamp: new Date().toISOString(),
         apiBaseUrl: `http://${host}:${port}`,
+        uptime: Math.round(uptime),
+        db: {
+          ok: dbOk,
+          size: dbSize,
+          cached: dbCache !== null,
+        },
+        memory: {
+          heapUsed: Math.round(mem.heapUsed / 1024 / 1024 * 100) / 100,
+          heapTotal: Math.round(mem.heapTotal / 1024 / 1024 * 100) / 100,
+        },
       }),
     );
   }
   if (request.method === "GET" && pathname === "/api/system/health") {
-    return sendJson(response, 200, ok(computeSystemHealth(db)));
+    const h = computeSystemHealth(db);
+    h.uptime = Math.round(process.uptime());
+    h.cacheEnabled = dbCache !== null;
+    return sendJson(response, 200, ok(h));
   }
 
   if (request.method === "POST" && pathname === "/api/logs/client-error") {
@@ -4115,7 +4212,9 @@ const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolv
 if (isMain) {
   if (!jwtSecret) process.exit(1);
   if (!adminPasswordHash) process.exit(1);
+  loadSessions();
   startRateLimitCleanup();
+  startSessionCleanup();
   server.listen(port, host, () => {
     writeRuntimeLog("info", "server.started", { host, port });
     runAutomationSchedulerTick();

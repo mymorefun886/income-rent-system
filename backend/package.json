@@ -10,5 +10,8 @@
     "reconcile:room-keys": "node scripts/reconcile-room-keys.mjs",
     "test": "vitest",
     "test:run": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }
