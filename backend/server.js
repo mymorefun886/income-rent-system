@@ -16,7 +16,6 @@ const dbPath = path.join(storageDir, "db.json");
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 8788);
 const username = process.env.ADMIN_USERNAME || "morefun886";
-const password = process.env.ADMIN_PASSWORD || "Mf848886#";
 const appOrigin = process.env.APP_ORIGIN || "";
 const apiAllowedOrigins = String(process.env.API_ALLOWED_ORIGINS || appOrigin || (process.env.NODE_ENV === "development" ? "http://localhost:8080" : ""))
   .split(",")
@@ -26,36 +25,34 @@ const apiAllowedOrigins = String(process.env.API_ALLOWED_ORIGINS || appOrigin ||
 if (!apiAllowedOrigins.length && !process.env.NODE_ENV) {
   console.warn("[安全] 未配置 APP_ORIGIN / API_ALLOWED_ORIGINS，API 将拒绝跨域请求。部署时请设置环境变量。");
 }
-// JWT Secret: 优先用环境变量，否则从文件读，再否则自动生成并保存
-const jwtSecretFile = path.join(storageDir, ".jwt_secret");
-let jwtSecret = process.env.JWT_SECRET || "";
+// ── P0-3: JWT Secret 強制由環境變數注入 ──
+const jwtSecret = process.env.JWT_SECRET || "";
 if (!jwtSecret) {
-  try { jwtSecret = readFileSync(jwtSecretFile, "utf8").trim(); } catch {}
-}
-if (!jwtSecret) {
-  jwtSecret = randomBytes(32).toString("hex");
-  try { writeFileSync(jwtSecretFile, jwtSecret, "utf8"); } catch {}
-  writeRuntimeLog("warn", "jwt_secret_generated", { msg: "自动生成了 JWT Secret，已保存到 .jwt_secret" });
+  console.error("❌ 嚴重錯誤：未設定 JWT_SECRET 環境變數，系統拒絕啟動！");
+  console.error("   JWT Secret 必須由外部注入，禁止自動生成。");
+  console.error("   建議生成：node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
+  process.exit(1);
 }
 const uploadMaxMb = Number(process.env.UPLOAD_MAX_MB || 10);
 const backupDir = process.env.BACKUP_DIR || path.join(storageDir, "backups");
 const loginMaxAttempts = Number(process.env.LOGIN_MAX_ATTEMPTS || 8);
 const loginLockMinutes = Number(process.env.LOGIN_LOCK_MINUTES || 15);
+// ── P0-2: ADMIN_PASSWORD_HASH 在啟動時讀取一次，全域可見 ──
 const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH || "";
 
 // 启动安全自检
 console.log("=== 收租系统后端启动 ===");
-if (username === "19020967028" && password === "M848886#" && !adminPasswordHash) {
-  console.warn("⚠️  安全警告：使用默认账号密码，部署到公网前必须修改！");
-  console.warn("   设置 ADMIN_PASSWORD_HASH 环境变量以使用安全密码。");
-  console.warn("   生成方法: node scripts/gen-password-hash.mjs <你的密码>");
-}
-if (!process.env.JWT_SECRET) {
-  console.log("🔐 JWT Secret 已自动生成并保存（未设置 JWT_SECRET 环境变量）");
+// ── P0-2: 強制要求 ADMIN_PASSWORD_HASH ──
+if (!adminPasswordHash) {
+  console.error("❌ 嚴重錯誤：未設定 ADMIN_PASSWORD_HASH 環境變數，系統拒絕啟動！");
+  console.error("   生產環境禁止使用明文密碼或無密碼模式。");
+  console.error("   生成 hash：node scripts/gen-password-hash.mjs <你的密碼>");
+  console.error("   然後設定 ADMIN_PASSWORD_HASH 環境變數");
+  process.exit(1);
 }
 if (!apiAllowedOrigins.length) {
-  console.warn("⚠️  未配置 API_ALLOWED_ORIGINS，跨域请求将被拒绝。");
-  console.warn("   设置 APP_ORIGIN 环境变量为你的前端域名。");
+  console.warn("⚠️  未配置 API_ALLOWED_ORIGINS，生產環境跨域請求將被拒絕。");
+  console.warn("   設置 APP_ORIGIN 環境變數為你的前端域名。");
 }
 // 自动清理 90 天前的归档日志
 try { const files=readdirSync(logsArchiveDir,{withFileTypes:true}); const cutoff=Date.now()-90*24*60*60*1000; let n=0; files.forEach(f=>{if(!f.isFile())return; try{if(statSync(path.join(logsArchiveDir,f.name)).mtimeMs<cutoff){unlinkSync(path.join(logsArchiveDir,f.name));n++;}}catch{}}); if(n)console.log("📦 已清理",n,"个过期归档日志（>90天）"); }catch{}
