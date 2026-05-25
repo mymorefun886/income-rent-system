@@ -1,5 +1,5 @@
 ﻿import { createHash, createHmac, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -64,6 +64,7 @@ const loginAttempts = new Map();
 const RATE_WINDOW_MS  = Number(process.env.RATE_LIMIT_WINDOW_MS  || 60_000);
 const RATE_MAX_REQUESTS = Number(process.env.RATE_LIMIT_MAX_REQUESTS || 60);
 const requestTimestamps = new Map();
+let rateLimitCleanupTimer = null;
 
 function isRateLimited(ip) {
   const now = Date.now();
@@ -84,6 +85,27 @@ function getRateLimitRemaining(ip) {
   const cutoff = now - RATE_WINDOW_MS;
   const stamps = (requestTimestamps.get(ip) || []).filter((t) => t > cutoff);
   return Math.max(0, RATE_MAX_REQUESTS - stamps.length);
+}
+
+// 定期清理過期 IP 記錄，防止 Map 無限增長
+function cleanupRateLimitData() {
+  const now = Date.now();
+  const cutoff = now - RATE_WINDOW_MS;
+  for (const [ip, stamps] of requestTimestamps) {
+    const valid = stamps.filter((t) => t > cutoff);
+    if (valid.length === 0) {
+      requestTimestamps.delete(ip);
+    } else {
+      requestTimestamps.set(ip, valid);
+    }
+  }
+}
+
+function startRateLimitCleanup() {
+  if (rateLimitCleanupTimer) return;
+  // 每 5 分鐘清理一次
+  rateLimitCleanupTimer = setInterval(cleanupRateLimitData, 5 * 60 * 1000);
+  if (rateLimitCleanupTimer.unref) rateLimitCleanupTimer.unref();
 }
 
 function ensureStorage() {
@@ -132,14 +154,49 @@ function ensureStorage() {
   }
 }
 
+// \u2500\u2500 \u8A18\u61B6\u9AD4\u5FEB\u53D6\uFF1A\u907F\u514D\u6BCF\u6B21\u8ACB\u6C42 readFileSync + JSON.parse \u2500\u2500
+let dbCache = null;
+let dbCacheMtime = 0;
+
 function readDb() {
-  const raw = readFileSync(dbPath, "utf8");
-  const safe = typeof raw === "string" ? raw.replace(/^\uFEFF/, "") : raw;
-  return JSON.parse(safe);
+  try {
+    const stat = statSync(dbPath);
+    // \u5982\u679C\u6A94\u6848\u672A\u8B8A\u66F4\uFF0C\u76F4\u63A5\u56DE\u50B3\u5FEB\u53D6
+    if (dbCache && stat.mtimeMs === dbCacheMtime) {
+      return dbCache;
+    }
+    const raw = readFileSync(dbPath, "utf8");
+    const safe = typeof raw === "string" ? raw.replace(/^\uFEFF/, "") : raw;
+    dbCache = JSON.parse(safe);
+    dbCacheMtime = stat.mtimeMs;
+    return dbCache;
+  } catch (e) {
+    // \u6A94\u6848\u640D\u58DE\u6642\u5617\u8A66\u5F9E .tmp \u6062\u5FA9
+    const tmpPath = dbPath + ".tmp";
+    if (existsSync(tmpPath)) {
+      try {
+        const raw = readFileSync(tmpPath, "utf8");
+        const safe = typeof raw === "string" ? raw.replace(/^\uFEFF/, "") : raw;
+        dbCache = JSON.parse(safe);
+        writeFileSync(dbPath, JSON.stringify(dbCache, null, 2));
+        dbCacheMtime = statSync(dbPath).mtimeMs;
+        writeRuntimeLog("warn", "db.recovered_from_tmp", {});
+        return dbCache;
+      } catch {}
+    }
+    throw e;
+  }
 }
 
 function writeDb(data) {
-  writeFileSync(dbPath, JSON.stringify(data, null, 2));
+  // \u539F\u5B50\u5BEB\u5165\uFF1A\u5148\u5BEB .tmp\uFF0C\u518D rename\uFF08\u540C\u6A94\u6848\u7CFB\u7D71\u4E0A\u70BA\u539F\u5B50\u64CD\u4F5C\uFF09
+  const tmpPath = dbPath + ".tmp";
+  const json = JSON.stringify(data, null, 2);
+  writeFileSync(tmpPath, json, "utf8");
+  renameSync(tmpPath, dbPath);
+  // \u66F4\u65B0\u8A18\u61B6\u9AD4\u5FEB\u53D6
+  dbCache = data;
+  dbCacheMtime = statSync(dbPath).mtimeMs;
 }
 
 function runtimeLogFilePath(date = new Date()) {
@@ -4058,6 +4115,7 @@ const isMain = import.meta.url === fileURLToPath(import.meta.url);
 if (isMain) {
   if (!jwtSecret) process.exit(1);
   if (!adminPasswordHash) process.exit(1);
+  startRateLimitCleanup();
   server.listen(port, host, () => {
     writeRuntimeLog("info", "server.started", { host, port });
     runAutomationSchedulerTick();
