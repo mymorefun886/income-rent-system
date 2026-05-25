@@ -19,10 +19,9 @@ export default function MeterInputPage() {
   const [csvPasteText, setCsvPasteText] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
-
   function handleSyncClick() {
-    if (cycle !== currentMonth) {
+    const existingCount = records.filter(r => String(r.cycle || "").trim() === cycle).length;
+    if (existingCount > 0) {
       setConfirmOpen(true);
     } else {
       syncToSystem();
@@ -339,8 +338,8 @@ export default function MeterInputPage() {
 
       <ConfirmDialog
         open={confirmOpen}
-        title="确认同步账期"
-        message={`您选择的账期为 ${cycle}，并非当前月份（${currentMonth}），确认要将抄表数据同步到此账期吗？同步将覆盖该月份的现有电费/水费数据。`}
+        title="该账期已有账单记录"
+        message={`该账期已有 ${records.filter(r => String(r.cycle || "").trim() === cycle).length} 条账单，同步将覆盖现有电费/水费数据。`}
         confirmText="确认同步"
         cancelText="取消"
         tone="warn"
