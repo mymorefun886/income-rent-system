@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { formatCurrency } from "../lib/format";
 import { useDashboard, useExpenses, useProperties, useRecords, useTenants } from "../hooks/useApiQuery";
+import ErrorBanner from "../components/ErrorBanner";
 
 const donutColors = ["#7da2ea", "#d1d5db"];
 
@@ -55,12 +56,14 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [showAudit, setShowAudit] = useState(false);
 
-  const { data: dashboardStats = null, isLoading: dLoading } = useDashboard();
-  const { data: properties = [], isLoading: pLoading } = useProperties();
-  const { data: tenants = [], isLoading: tLoading } = useTenants();
-  const { data: records = [], isLoading: rLoading } = useRecords();
-  const { data: expenses = [], isLoading: eLoading } = useExpenses();
+  const { data: dashboardStats = null, isLoading: dLoading, isError: dErr, error: dError, refetch: dRefetch } = useDashboard();
+  const { data: properties = [], isLoading: pLoading, isError: pErr, refetch: pRefetch } = useProperties();
+  const { data: tenants = [], isLoading: tLoading, isError: tErr, refetch: tRefetch } = useTenants();
+  const { data: records = [], isLoading: rLoading, isError: rErr, refetch: rRefetch } = useRecords();
+  const { data: expenses = [], isLoading: eLoading, isError: eErr, refetch: eRefetch } = useExpenses();
   const loading = dLoading || pLoading || tLoading || rLoading || eLoading;
+  const hasError = dErr || pErr || tErr || rErr || eErr;
+  const refetchAll = () => { dRefetch(); pRefetch(); tRefetch(); rRefetch(); eRefetch(); };
 
   const activeTenants = useMemo(() => tenants.filter((item) => !item.archived), [tenants]);
   const occupiedRooms = useMemo(() => new Set(activeTenants.map((item) => String(item.room || ""))), [activeTenants]);
@@ -207,6 +210,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {hasError ? <ErrorBanner message="部分数据加载失败" onRetry={refetchAll} /> : null}
+
       <section className="rounded-2xl bg-white p-6 ring-1 ring-slate-200">
         <h1 className="text-3xl font-semibold text-slate-900">首页工作台</h1>
         <p className="mt-2 text-sm text-slate-500">核心指标与快捷入口</p>

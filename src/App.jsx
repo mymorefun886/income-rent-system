@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -59,18 +60,20 @@ const AppRoutes = () => (
 );
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <HashRouter>
-          <Suspense fallback={<RouteSkeleton />}>
-            <AppRoutes />
-          </Suspense>
-        </HashRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <HashRouter>
+            <Suspense fallback={<RouteSkeleton />}>
+              <AppRoutes />
+            </Suspense>
+          </HashRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
