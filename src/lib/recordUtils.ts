@@ -1,7 +1,39 @@
-const DEFAULT_ELECTRIC_PRICE = 0.8;
-const DEFAULT_WATER_PRICE = 5.5;
+export interface RecordForm {
+  tenant: string;
+  tenantId: string;
+  room: string;
+  cycle: string;
+  rentPart: string;
+  receivable: string;
+  received: string;
+  status: string;
+  method: string;
+  dueDate: string;
+  note: string;
+  electricPrev: string;
+  electricNow: string;
+  electricUsage: string;
+  electricPrice: string;
+  waterPrev: string;
+  waterNow: string;
+  waterUsage: string;
+  waterPrice: string;
+  waterMinimumCharge: string;
+  propertyFee: string;
+  networkFee: string;
+  garbageFee: string;
+  miscFee: string;
+  otherFee: string;
+  depositAdjustment: string;
+  paidAt?: string;
+  noWaterMeter?: boolean;
+  [key: string]: unknown;
+}
 
-export const defaultForm = () => ({
+export const DEFAULT_ELECTRIC_PRICE = 0.8;
+export const DEFAULT_WATER_PRICE = 5.5;
+
+export const defaultForm = (): RecordForm => ({
   tenant: "",
   tenantId: "",
   room: "",
@@ -30,22 +62,22 @@ export const defaultForm = () => ({
   depositAdjustment: "0",
 });
 
-export function normalizeKey(value) {
+export function normalizeKey(value: string | null | undefined): string {
   return String(value || "").replace(/\s+/g, "").toUpperCase();
 }
 
-export function normalizeRoomMatch(value) {
+export function normalizeRoomMatch(value: string | null | undefined): string {
   return String(value || "")
     .replace(/\s+/g, "")
     .replace(/[-－_]/g, "")
     .toUpperCase();
 }
 
-export function makeRoomKey(building, room) {
+export function makeRoomKey(building: string | null | undefined, room: string | null | undefined): string {
   return `${String(building || "").trim()}::${normalizeKey(room)}`;
 }
 
-export function parseRoomText(value) {
+export function parseRoomText(value: string | null | undefined): { building: string; room: string } {
   const raw = String(value || "").trim();
   if (!raw) return { building: "", room: "" };
   const m = raw.match(/^(.*?)\s*[-－]\s*(.+)$/);
@@ -55,11 +87,11 @@ export function parseRoomText(value) {
   return { building: raw.slice(0, idx).trim(), room: raw.slice(idx + 1).trim() };
 }
 
-export function isFactoryRoom(formLike) {
+export function isFactoryRoom(formLike: RecordForm | null | undefined): boolean {
   return Boolean(formLike?.noWaterMeter);
 }
 
-export function applyMeterAutoFields(formLike) {
+export function applyMeterAutoFields(formLike: RecordForm): RecordForm {
   const next = { ...formLike };
   const ePrev = Number(next.electricPrev || 0);
   const eNow = Number(next.electricNow || 0);
@@ -77,7 +109,7 @@ export function applyMeterAutoFields(formLike) {
   return next;
 }
 
-export function applyOtherFeeParts(formLike) {
+export function applyOtherFeeParts(formLike: RecordForm): RecordForm {
   const next = { ...formLike };
   const total =
     Number(next.propertyFee || 0) +
@@ -88,7 +120,7 @@ export function applyOtherFeeParts(formLike) {
   return next;
 }
 
-export function recalcReceivable(formLike) {
+export function recalcReceivable(formLike: RecordForm): RecordForm {
   const next = { ...formLike };
   const rentPart = Number(next.rentPart || 0);
   const electricUsage = Number(next.electricUsage || 0);
@@ -103,23 +135,35 @@ export function recalcReceivable(formLike) {
   return next;
 }
 
-export function pickFeeItem(tenant, patterns) {
+interface FeeItem {
+  name?: string;
+  unitPrice?: string | number;
+  initialReading?: string | number;
+}
+
+interface Tenant {
+  id?: string;
+  feeItems?: FeeItem[];
+  [key: string]: unknown;
+}
+
+export function pickFeeItem(tenant: Tenant | null | undefined, patterns: RegExp[]): FeeItem | undefined {
   const feeItems = Array.isArray(tenant?.feeItems) ? tenant.feeItems : [];
   return feeItems.find((f) => patterns.some((re) => re.test(String(f?.name || ""))));
 }
 
-export function pickValidPrice(value, fallback) {
+export function pickValidPrice(value: string | number | null | undefined, fallback: number): string {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? String(n) : String(fallback);
 }
 
-export function pickMinPrice(value, minValue) {
+export function pickMinPrice(value: string | number | null | undefined, minValue: number): string {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return String(minValue);
   return String(n < minValue ? minValue : n);
 }
 
-export function getTenantFeeDefaults(tenant) {
+export function getTenantFeeDefaults(tenant: Tenant | null | undefined): Record<string, string> {
   const electric = pickFeeItem(tenant, [/电/i, /electric/i]);
   const water = pickFeeItem(tenant, [/水/i, /water/i]);
   const propertyFee = pickFeeItem(tenant, [/物业/i]);
@@ -137,5 +181,3 @@ export function getTenantFeeDefaults(tenant) {
     miscFee: miscFee?.unitPrice ?? "0",
   };
 }
-
-export { DEFAULT_ELECTRIC_PRICE, DEFAULT_WATER_PRICE };

@@ -1,17 +1,17 @@
-﻿export function formatCurrency(value) {
+export function formatCurrency(value: number | string | null | undefined): string {
   return `¥${Number(value || 0).toLocaleString("zh-CN")}`;
 }
 
-export function formatDate(value) {
+export function formatDate(value: string | null | undefined): string {
   if (!value || value === "-") return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   return d.toLocaleDateString("zh-CN");
 }
 
-export function getStatusTone(status) {
+export function getStatusTone(status: string): string {
   const s = String(status || "").trim();
-  const map = {
+  const map: Record<string, string> = {
     已出租: "bg-emerald-100 text-emerald-700",
     闲置: "bg-rose-100 text-rose-700",
     正常: "bg-emerald-100 text-emerald-700",
