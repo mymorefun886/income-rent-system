@@ -31,7 +31,6 @@ if (!jwtSecret) {
   console.error("❌ 嚴重錯誤：未設定 JWT_SECRET 環境變數，系統拒絕啟動！");
   console.error("   JWT Secret 必須由外部注入，禁止自動生成。");
   console.error("   建議生成：node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
-  process.exit(1);
 }
 const uploadMaxMb = Number(process.env.UPLOAD_MAX_MB || 10);
 const backupDir = process.env.BACKUP_DIR || path.join(storageDir, "backups");
@@ -49,7 +48,6 @@ if (!adminPasswordHash) {
   console.error("   生產環境禁止使用明文密碼或無密碼模式。");
   console.error("   生成 hash：node scripts/gen-password-hash.mjs <你的密碼>");
   console.error("   然後設定 ADMIN_PASSWORD_HASH 環境變數");
-  process.exit(1);
 }
 if (!apiAllowedOrigins.length) {
   console.warn("⚠️  未配置 API_ALLOWED_ORIGINS，生產環境跨域請求將被拒絕。");
@@ -2086,7 +2084,7 @@ function applyImportToDb(db, preview, overwrite = false) {
 
 ensureStorage();
 
-const server = http.createServer(async (request, response) => {
+async function handler(request, response) {
   if (!request.url) return sendJson(response, 404, { success: false, message: "Not Found" });
   const reqStart = Date.now();
 
@@ -4013,7 +4011,9 @@ const server = http.createServer(async (request, response) => {
   }
 
   return sendJson(response, 404, { success: false, message: "接口不存在" });
-});
+}
+
+const server = http.createServer(handler);
 
 function runKeyByScheduleToday(lastRuns = {}, key = "", today = "") {
   const last = String(lastRuns[key] || "").slice(0, 10);
@@ -4056,6 +4056,8 @@ async function runAutomationSchedulerTick() {
 // 僅在直接執行時啟動伺服器（非 module import 模式）
 const isMain = import.meta.url === fileURLToPath(import.meta.url);
 if (isMain) {
+  if (!jwtSecret) process.exit(1);
+  if (!adminPasswordHash) process.exit(1);
   server.listen(port, host, () => {
     writeRuntimeLog("info", "server.started", { host, port });
     runAutomationSchedulerTick();
@@ -4064,7 +4066,7 @@ if (isMain) {
   });
 }
 
-export { server };
+export { server, handler };
 
 process.on("uncaughtException", (err) => {
   writeRuntimeLog("error", "process.uncaughtException", {
