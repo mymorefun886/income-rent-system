@@ -108,6 +108,7 @@ const RentRecordsPage = () => {
   const [singleCard, setSingleCard] = useState(null);
   const cardRefs = useRef({});
   const [form, setForm] = useState(defaultForm());
+  const [waterMinimumEdited, setWaterMinimumEdited] = useState(false);
   const [printPayQrUrl, setPrintPayQrUrl] = useState(() => localStorage.getItem("income-print-pay-qr") || "");
 
 
@@ -309,6 +310,7 @@ const RentRecordsPage = () => {
 
   function openCreate() {
     setEditing(null);
+    setWaterMinimumEdited(false);
     setForm(defaultForm());
     setFormOpen(true);
   }
@@ -321,6 +323,7 @@ const RentRecordsPage = () => {
       tenants.find((t) => String(t.name || "").trim() === String(item.tenant || "").trim());
 
     setEditing(item);
+    setWaterMinimumEdited(false);
     setForm({
       tenant: item.tenant || "",
       tenantId: matchedTenant?.id || item.tenantId || "",
@@ -432,7 +435,7 @@ const RentRecordsPage = () => {
         setError("该房间为自用（不出租），不能创建或保存收租账单");
         return;
       }
-      const computed = recalcReceivable(applyOtherFeeParts(applyMeterAutoFields(form)));
+      const computed = recalcReceivable(applyOtherFeeParts(applyMeterAutoFields(form, waterMinimumEdited ? form.waterMinimumCharge : undefined)));
       const payload = {
         ...(editing || {}),
         ...computed,
@@ -1052,15 +1055,15 @@ const RentRecordsPage = () => {
               <label className="text-sm">收款方式<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.method} onChange={(e) => setForm((p) => ({ ...p, method: e.target.value || "微信" }))} /></label>
               <label className="text-sm">到期日<input type="date" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.dueDate} onChange={(e) => setForm((p) => ({ ...p, dueDate: e.target.value }))} /></label>
               <label className="text-sm">收款日期<input type="date" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.paidAt || ""} onChange={(e) => setForm((p) => ({ ...p, paidAt: e.target.value }))} /></label>
-              <label className="text-sm">上月电表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.electricPrev} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, electricPrev: e.target.value })))} /></label>
-              <label className="text-sm">本月电表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.electricNow} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, electricNow: e.target.value })))} /></label>
+              <label className="text-sm">上月电表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.electricPrev} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, electricPrev: e.target.value }, waterMinimumEdited ? p.waterMinimumCharge : undefined)))} /></label>
+              <label className="text-sm">本月电表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.electricNow} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, electricNow: e.target.value }, waterMinimumEdited ? p.waterMinimumCharge : undefined)))} /></label>
               <label className="text-sm">电费单价<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.electricPrice} onChange={(e) => setForm((p) => recalcReceivable({ ...p, electricPrice: e.target.value }))} /></label>
               <label className="text-sm">电表实用读数<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.electricUsage} readOnly /></label>
-              <label className="text-sm">上月水表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterPrev} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, waterPrev: e.target.value })))} /></label>
-              <label className="text-sm">本月水表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterNow} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, waterNow: e.target.value })))} /></label>
-              <label className="text-sm">水费单价<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterPrice} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, waterPrice: e.target.value })))} /></label>
+              <label className="text-sm">上月水表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterPrev} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, waterPrev: e.target.value }, waterMinimumEdited ? p.waterMinimumCharge : undefined)))} /></label>
+              <label className="text-sm">本月水表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterNow} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, waterNow: e.target.value }, waterMinimumEdited ? p.waterMinimumCharge : undefined)))} /></label>
+              <label className="text-sm">水费单价<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterPrice} onChange={(e) => setForm((p) => recalcReceivable(applyMeterAutoFields({ ...p, waterPrice: e.target.value }, waterMinimumEdited ? p.waterMinimumCharge : undefined)))} /></label>
               <label className="text-sm">水表实用读数<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.waterUsage} readOnly /></label>
-              <label className="text-sm">水费保底<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.waterMinimumCharge} readOnly /></label>
+              <label className="text-sm">水费保底<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterMinimumCharge} onChange={(e) => { setWaterMinimumEdited(true); setForm((p) => recalcReceivable({ ...p, waterMinimumCharge: e.target.value })); }} /></label>
               <label className="text-sm">物业管理费<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.propertyFee} onChange={(e) => setForm((p) => recalcReceivable(applyOtherFeeParts({ ...p, propertyFee: e.target.value })))} /></label>
               <label className="text-sm">宽带费<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.networkFee} onChange={(e) => setForm((p) => recalcReceivable(applyOtherFeeParts({ ...p, networkFee: e.target.value })))} /></label>
               <label className="text-sm">税费<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.garbageFee} onChange={(e) => setForm((p) => recalcReceivable(applyOtherFeeParts({ ...p, garbageFee: e.target.value })))} /></label>

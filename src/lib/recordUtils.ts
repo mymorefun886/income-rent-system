@@ -91,7 +91,7 @@ export function isFactoryRoom(formLike: RecordForm | null | undefined): boolean 
   return Boolean(formLike?.noWaterMeter);
 }
 
-export function applyMeterAutoFields(formLike: RecordForm): RecordForm {
+export function applyMeterAutoFields(formLike: RecordForm, prevWaterMinimum?: string | number): RecordForm {
   const next = { ...formLike };
   const ePrev = Number(next.electricPrev || 0);
   const eNow = Number(next.electricNow || 0);
@@ -105,7 +105,12 @@ export function applyMeterAutoFields(formLike: RecordForm): RecordForm {
   next.electricUsage = String(Number.isFinite(eUsage) ? eUsage : 0);
   next.waterUsage = String(Number.isFinite(wUsage) ? wUsage : 0);
   const disableMinimum = isFactoryRoom(next);
-  next.waterMinimumCharge = String(disableMinimum ? 0 : (wUsage < 1 ? Math.round(((1 - wUsage) * (Number.isFinite(wPrice) ? wPrice : 0)) * 100) / 100 : 0));
+  // Preserve user-edited waterMinimumCharge if provided, otherwise auto-calculate
+  if (prevWaterMinimum !== undefined) {
+    next.waterMinimumCharge = String(prevWaterMinimum);
+  } else {
+    next.waterMinimumCharge = String(disableMinimum ? 0 : (wUsage < 1 ? Math.round(((1 - wUsage) * (Number.isFinite(wPrice) ? wPrice : 0)) * 100) / 100 : 0));
+  }
   return next;
 }
 
