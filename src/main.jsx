@@ -1,6 +1,6 @@
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
-import { reportClientError } from "./lib/api.js";
+import { reportClientError } from "./lib/api";
 import "./index.css";
 
 window.addEventListener("error", (event) => {
