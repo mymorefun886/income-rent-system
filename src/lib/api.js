@@ -16,8 +16,8 @@ function getCookieToken() {
 }
 
 function getHeaders(extraHeaders = {}) {
-  // 優先讀取 HttpOnly Cookie，fallback 到 localStorage
-  const token = getCookieToken() || localStorage.getItem("income-local-token") || "";
+  // 從 HttpOnly Cookie 讀取 token
+  const token = getCookieToken() || "";
 
   return {
     "Content-Type": "application/json",
@@ -393,4 +393,18 @@ export async function updateSettings(payload) {
 // P1-3: 從 HttpOnly Cookie 恢復 session
 export async function fetchMe() {
   return request("/api/auth/me");
+}
+
+// 待實現的 API（功能預留接口，調用後端對應端點）
+export async function createMeterTask(payload) {
+  return request("/api/meter-tasks", { method: "POST", body: JSON.stringify(payload) });
+}
+export async function confirmMeterTask(taskId, payload) {
+  return request(`/api/meter-tasks/${taskId}/confirm`, { method: "POST", body: JSON.stringify(payload) });
+}
+export async function generateBillsFromReadings(payload) {
+  return request("/api/bills/generate-from-readings", { method: "POST", body: JSON.stringify(payload) });
+}
+export async function fetchWechatMessages(cycle) {
+  return request(`/api/wechat/messages?cycle=${encodeURIComponent(cycle)}`);
 }

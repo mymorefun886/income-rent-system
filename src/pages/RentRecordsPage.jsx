@@ -4,14 +4,19 @@ import { toPng } from "html-to-image";
 import {
   apiEnabled,
   clearRecords,
+  createMeterTask,
   createRecord,
   deleteRecord,
   fetchProperties,
   fetchRecords,
   fetchSettings,
   fetchTenants,
+  fetchWechatMessages,
+  generateBillsFromReadings,
+  confirmMeterTask,
   markBillSent,
   updateRecord,
+  uploadFile,
 } from "../lib/api";
 import { rentRecords as fallbackRecords } from "../lib/mock-data";
 import { formatCurrency, formatDate, getStatusTone } from "../lib/format";
@@ -797,13 +802,15 @@ const RentRecordsPage = () => {
       const eAmt = Math.round(Number(item.electricUsage||0) * Number(item.electricPrice||0));
       const wAmt = Math.round(Number(item.waterUsage||0) * Number(item.waterPrice||0) + Number(item.waterMinimumCharge||0));
       const hasMeter = Number(item.electricUsage||0) > 0 || Number(item.waterUsage||0) > 0 || Number(item.electricPrev||0) > 0 || Number(item.waterPrev||0) > 0;
+      const esc = (s) => { const d = document.createElement("div"); d.appendChild(document.createTextNode(String(s ?? ""))); return d.innerHTML; };
+
       const card = document.createElement("div");
       card.style.cssText = "width:400px;background:#fff;border-radius:16px;overflow:hidden;font-family:'Microsoft YaHei',sans-serif;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.08)";
       card.innerHTML = `
         <div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;padding:16px 18px">
           <div style="font-size:12px;opacity:.8">收租账单 · ${cycle}</div>
-          <div style="font-size:21px;font-weight:bold;margin-top:2px">${item.room||"-"}</div>
-          <div style="font-size:16px;margin-top:1px">${item.tenant||"-"}</div>
+          <div style="font-size:21px;font-weight:bold;margin-top:2px">${esc(item.room||"-")}</div>
+          <div style="font-size:16px;margin-top:1px">${esc(item.tenant||"-")}</div>
         </div>
         <div style="padding:14px 18px">
           ${hasMeter ? `<div style="border-left:3px solid #e2e8f0;padding-left:12px;margin-bottom:8px">
@@ -819,7 +826,7 @@ const RentRecordsPage = () => {
             <div style="font-size:11px;color:#64748b">本期应收</div>
             <div style="font-size:26px;font-weight:bold;color:#16a34a">¥${Number(item.receivable||0).toFixed(0)}</div>
           </div>
-          <div style="margin-top:6px;font-size:11px;color:#94a3b8;text-align:center">到期日：${item.dueDate||"-"} · ${item.method||"微信"}</div>
+          <div style="margin-top:6px;font-size:11px;color:#94a3b8;text-align:center">到期日：${esc(item.dueDate||"-")} · ${esc(item.method||"微信")}</div>
           ${unpaid>0 ? `<div style="margin-top:4px;font-size:12px;color:#ef4444;text-align:center;font-weight:bold">未收 ¥${unpaid.toFixed(0)}</div>`:""}
         </div>
         <div style="background:#f8fafc;padding:8px;text-align:center;font-size:10px;color:#94a3b8">收租佬系统</div>
@@ -1010,9 +1017,11 @@ const RentRecordsPage = () => {
       const container = document.createElement("div");
       container.style.cssText = "position:fixed;left:-9999px;top:0;width:400px;";
       document.body.appendChild(container);
+      const esc = (s) => { const d = document.createElement("div"); d.appendChild(document.createTextNode(String(s ?? ""))); return d.innerHTML; };
+
       const card = document.createElement("div");
       card.style.cssText = "width:400px;background:#fff;border-radius:16px;overflow:hidden;font-family:'Microsoft YaHei',sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.08)";
-      card.innerHTML = `<div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;padding:16px 18px"><div style="font-size:12px;opacity:.8">收租账单 · ${cycle}</div><div style="font-size:21px;font-weight:bold;margin-top:2px">${item.room||"-"}</div><div style="font-size:16px;margin-top:1px">${item.tenant||"-"}</div></div><div style="padding:14px 18px">${hasMeter?`<div style="border-left:3px solid #e2e8f0;padding-left:12px;margin-bottom:8px">${Number(item.electricUsage||0)>0||Number(item.electricPrev||0)>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#475569;padding:2px 0"><span>电表</span><span>${item.electricPrev||0}→${item.electricNow||0}(${item.electricUsage||0}度)</span><span style="font-weight:bold;color:#1e293b">¥${eAmt}</span></div>`:""}${Number(item.waterUsage||0)>0||Number(item.waterPrev||0)>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#475569;padding:2px 0"><span>水表</span><span>${item.waterPrev||0}→${item.waterNow||0}(${item.waterUsage||0}方)</span><span style="font-weight:bold;color:#1e293b">¥${wAmt}</span></div>`:""}</div>`:""}<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:14px;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">租金</span><span style="font-weight:500">¥${Number(item.rentPart||0).toFixed(0)}</span></div>${Number(item.garbageFee||0)>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:14px;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">税费</span><span style="font-weight:500">¥${Number(item.garbageFee||0).toFixed(0)}</span></div>`:""}<div style="background:#f0fdf4;border-radius:10px;padding:10px;margin-top:8px;text-align:center"><div style="font-size:11px;color:#64748b">本期应收</div><div style="font-size:26px;font-weight:bold;color:#16a34a">¥${Number(item.receivable||0).toFixed(0)}</div></div><div style="margin-top:6px;font-size:11px;color:#94a3b8;text-align:center">到期日：${item.dueDate||"-"} · ${item.method||"微信"}</div></div><div style="background:#f8fafc;padding:8px;text-align:center;font-size:10px;color:#94a3b8">收租佬系统</div>`;
+      card.innerHTML = `<div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;padding:16px 18px"><div style="font-size:12px;opacity:.8">收租账单 · ${cycle}</div><div style="font-size:21px;font-weight:bold;margin-top:2px">${esc(item.room||"-")}</div><div style="font-size:16px;margin-top:1px">${esc(item.tenant||"-")}</div></div><div style="padding:14px 18px">${hasMeter?`<div style="border-left:3px solid #e2e8f0;padding-left:12px;margin-bottom:8px">${Number(item.electricUsage||0)>0||Number(item.electricPrev||0)>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#475569;padding:2px 0"><span>电表</span><span>${item.electricPrev||0}→${item.electricNow||0}(${item.electricUsage||0}度)</span><span style="font-weight:bold;color:#1e293b">¥${eAmt}</span></div>`:""}${Number(item.waterUsage||0)>0||Number(item.waterPrev||0)>0?`<div style="display:flex;justify-content:space-between;font-size:13px;color:#475569;padding:2px 0"><span>水表</span><span>${item.waterPrev||0}→${item.waterNow||0}(${item.waterUsage||0}方)</span><span style="font-weight:bold;color:#1e293b">¥${wAmt}</span></div>`:""}</div>`:""}<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:14px;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">租金</span><span style="font-weight:500">¥${Number(item.rentPart||0).toFixed(0)}</span></div>${Number(item.garbageFee||0)>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:14px;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">税费</span><span style="font-weight:500">¥${Number(item.garbageFee||0).toFixed(0)}</span></div>`:""}<div style="background:#f0fdf4;border-radius:10px;padding:10px;margin-top:8px;text-align:center"><div style="font-size:11px;color:#64748b">本期应收</div><div style="font-size:26px;font-weight:bold;color:#16a34a">¥${Number(item.receivable||0).toFixed(0)}</div></div><div style="margin-top:6px;font-size:11px;color:#94a3b8;text-align:center">到期日：${item.dueDate||"-"} · ${item.method||"微信"}</div></div><div style="background:#f8fafc;padding:8px;text-align:center;font-size:10px;color:#94a3b8">收租佬系统</div>`;
       container.appendChild(card);
       const dataUrl = await toPng(card, { pixelRatio: 2, backgroundColor: "#fff" });
       container.removeChild(card);

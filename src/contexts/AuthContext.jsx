@@ -3,6 +3,7 @@ import { apiEnabled, apiLogin, fetchMe } from "../lib/api";
 import { demoUser, loginGuide } from "../lib/mock-data";
 
 const AuthContext = createContext();
+// P1-1: token now managed via HttpOnly cookie only
 const TOKEN_KEY = "income-local-token";
 const USER_KEY = "income-local-user";
 
@@ -29,23 +30,10 @@ export const AuthProvider = ({ children }) => {
           setUser(me.user || null);
           setIsAuthenticated(true);
         })
-        .catch(() => {
-          // Cookie 無效，嘗試 localStorage fallback
-          const token = localStorage.getItem(TOKEN_KEY);
-          const storedUser = localStorage.getItem(USER_KEY);
-          if (token && storedUser) {
-            setUser(JSON.parse(storedUser));
-            setIsAuthenticated(true);
-          }
-        })
+        .catch(() => { /* localStorage fallback removed per P1-1 */ })
         .finally(() => setLoading(false));
     } else {
-      const token = localStorage.getItem(TOKEN_KEY);
-      const storedUser = localStorage.getItem(USER_KEY);
-      if (token && storedUser) {
-        setIsAuthenticated(true);
-        setUser(JSON.parse(storedUser));
-      }
+      /* localStorage fallback removed per P1-1 */
       setLoading(false);
     }
   }, []);
@@ -80,8 +68,8 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
-      localStorage.setItem(TOKEN_KEY, authPayload.token);
-      localStorage.setItem(USER_KEY, JSON.stringify(authPayload.user));
+      // P1-1: localStorage.setItem(TOKEN_KEY, authPayload.token); // removed - token via HttpOnly cookie
+      // P1-1: localStorage.setItem(USER_KEY, JSON.stringify(authPayload.user)); // removed - user via /api/auth/me
       setIsAuthenticated(true);
       setUser(authPayload.user);
 
@@ -95,8 +83,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    // P1-1: localStorage.removeItem(TOKEN_KEY); // removed - cookie handled by server
+    // P1-1: localStorage.removeItem(USER_KEY); // removed - cookie handled by server
     setIsAuthenticated(false);
     setUser(null);
   };

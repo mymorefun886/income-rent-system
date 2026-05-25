@@ -284,6 +284,7 @@ export default function TenantsPage() {
   const [checkoutDaily, setCheckoutDaily] = useState(false);
   const [checkoutElectric, setCheckoutElectric] = useState("");
   const [checkoutWater, setCheckoutWater] = useState("");
+  const [checkoutDate, setCheckoutDate] = useState("");
   const [renewTarget, setRenewTarget] = useState(null);
   const [renewLeaseEnd, setRenewLeaseEnd] = useState("");
   const [renewRent, setRenewRent] = useState("");

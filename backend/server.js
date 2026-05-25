@@ -7,7 +7,7 @@ import { gzipSync } from "node:zlib";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const storageDir = path.join(__dirname, "storage");
+const storageDir = process.env.STORAGE_DIR || path.join(__dirname, "storage");
 const uploadsDir = path.join(storageDir, "uploads");
 const logsDir = path.join(storageDir, "logs");
 const logsArchiveDir = path.join(logsDir, "archive");
