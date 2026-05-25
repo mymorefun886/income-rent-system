@@ -2301,13 +2301,13 @@ async function handler(request, response) {
         `income-session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
       ]);
       writeDb(db);
-      // P1-3: HttpOnly Cookie (新登入)
+      // P1-3: HttpOnly Cookie (新登入) + token in body for SPA auth
       response.setHeader("Set-Cookie", [
         `income-session=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${7 * 24 * 60 * 60}`,
       ]);
-      // P1-2: token only sent via HttpOnly cookie, not in response body
       return sendJson(response, 200, {
         success: true,
+        token,
         user: db.user,
       });
     } catch {
@@ -4111,7 +4111,7 @@ async function runAutomationSchedulerTick() {
 }
 
 // 僅在直接執行時啟動伺服器（非 module import 模式）
-const isMain = import.meta.url === fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isMain) {
   if (!jwtSecret) process.exit(1);
   if (!adminPasswordHash) process.exit(1);
