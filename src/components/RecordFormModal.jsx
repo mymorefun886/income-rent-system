@@ -68,7 +68,7 @@ export default function RecordFormModal({
           <label className="text-sm">本月水表读数<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterNow} onChange={(e) => handleMeterChange("waterNow", e.target.value)} /></label>
           <label className="text-sm">水费单价<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterPrice} onChange={(e) => handleChange("waterPrice", e.target.value)} /></label>
           <label className="text-sm">水表实用读数<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.waterUsage} readOnly /></label>
-          <label className="text-sm">水费保底<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.waterMinimumCharge} readOnly /></label>
+          <label className="text-sm">水费保底<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.waterMinimumCharge} onChange={(e) => handleChange("waterMinimumCharge", e.target.value)} /></label>
           <label className="text-sm">物业管理费<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.propertyFee} onChange={(e) => handleFeeChange("propertyFee", e.target.value)} /></label>
           <label className="text-sm">宽带费<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.networkFee} onChange={(e) => handleFeeChange("networkFee", e.target.value)} /></label>
           <label className="text-sm">税费<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.garbageFee} onChange={(e) => handleFeeChange("garbageFee", e.target.value)} /></label>
