@@ -1,10 +1,9 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { Edit3, Plus, RefreshCw, Trash2, Users, UserX, X, ZoomIn } from "lucide-react";
+import { Edit3, Plus, RefreshCw, Trash2, Users, UserX, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  API_BASE_URL,
   apiEnabled,
   createTenant,
   deleteTenant,
@@ -16,202 +15,20 @@ import {
 } from "../lib/api";
 import { properties as fallbackProperties, tenants as fallbackTenants } from "../lib/mock-data";
 import { formatCurrency, formatDate, getStatusTone } from "../lib/format";
+import {
+  quickLeaseButtons,
+  unitOptions,
+  billingModes,
+  feeNameOptions,
+  defaultFeeItems,
+  applyFeePreset,
+  makeTenantRoomKey,
+  addMonths,
+  makeForm,
+  toForm,
+} from "../lib/tenantUtils";
 import ConfirmDialog from "../components/ConfirmDialog";
-
-const quickLeaseButtons = [
-  { label: "半年", months: 6 },
-  { label: "一年", months: 12 },
-  { label: "两年", months: 24 },
-];
-const unitOptions = ["元/度", "元/吨", "元/立方", "元/月", "元/次"];
-const billingModes = ["抄表计算", "固定费用", "一次性费用"];
-const feeNameOptions = ["电费", "水费", "物业管理费", "宽带费", "税费", "其他费用"];
-
-// 深圳城中村出租屋水电价格参考标准（2024）
-const SHENZHEN_ELECTRIC_PRICE = 0.80;
-const SHENZHEN_WATER_PRICE = 5.50;
-
-function defaultFeeItems() {
-  return [
-    { id: `fee-${Date.now()}-electric`, name: "电费", billingMode: "抄表计算", unitPrice: String(SHENZHEN_ELECTRIC_PRICE), unit: "元/度", initialReading: "0", hasMinimum: false, minimumCharge: "0" },
-    { id: `fee-${Date.now()}-water`, name: "水费", billingMode: "抄表计算", unitPrice: String(SHENZHEN_WATER_PRICE), unit: "元/立方", initialReading: "0", hasMinimum: true, minimumCharge: String(SHENZHEN_WATER_PRICE) },
-  ];
-}
-
-function validateChineseIdCard(idNumber) {
-  const id = String(idNumber || "").trim();
-  if (!id) return { valid: true, message: "" };
-  if (!/^\d{17}[\dXx]$/.test(id)) return { valid: false, message: "身份证号必须为18位" };
-  const birth = id.substring(6, 14);
-  const year = parseInt(birth.substring(0, 4), 10);
-  const month = parseInt(birth.substring(4, 6), 10);
-  const day = parseInt(birth.substring(6, 8), 10);
-  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return { valid: false, message: "身份证号中的出生日期无效" };
-  const weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2];
-  const checkChars = "10X98765432";
-  const sum = id.substring(0, 17).split("").reduce((acc, d, i) => acc + parseInt(d, 10) * weights[i], 0);
-  const expected = checkChars[sum % 11];
-  if (id[17].toUpperCase() !== expected) return { valid: false, message: "身份证号校验位不正确" };
-  return { valid: true, message: "" };
-}
-
-function applyFeePreset(item, name) {
-  const next = { ...item, name };
-  if (name === "电费") {
-    next.billingMode = "抄表计算";
-    next.unit = "元/度";
-    next.unitPrice = String(SHENZHEN_ELECTRIC_PRICE);
-    next.hasMinimum = false;
-    next.minimumCharge = "0";
-  }
-  if (name === "水费") {
-    next.billingMode = "抄表计算";
-    next.unit = "元/立方";
-    next.unitPrice = String(SHENZHEN_WATER_PRICE);
-    next.hasMinimum = true;
-    next.minimumCharge = String(SHENZHEN_WATER_PRICE);
-  }
-  return next;
-}
-
-function normalizeRoomKey(v) {
-  return String(v || "").replace(/\s+/g, "").toUpperCase();
-}
-
-function makeTenantRoomKey(building, room) {
-  return `${String(building || "").trim()}::${normalizeRoomKey(room)}`;
-}
-
-function addMonths(dateString, months) {
-  const d = new Date(dateString);
-  if (Number.isNaN(d.getTime())) return dateString;
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().slice(0, 10);
-}
-
-function toPreviewUrl(url) {
-  if (!url) return "";
-  if (/^https?:\/\//i.test(url)) return url;
-  return API_BASE_URL ? `${API_BASE_URL}${url}` : url;
-}
-
-function IdPhotoCard({ label, side, url, onUpload, onPreview, onRemove, uploading, error }) {
-  const sideLabel = side === "idCardFront" ? "正面" : "反面";
-  const busy = uploading === side;
-  const FileInput = ({ children, className }) => (
-    <label className={className + " relative cursor-pointer"}>
-      {children}
-      <input className="absolute inset-0 opacity-0 cursor-pointer" type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) { onUpload(f, side); e.target.value = ""; } }} />
-    </label>
-  );
-  return (
-    <div className="rounded-xl border border-slate-300 overflow-hidden">
-      {url ? (
-        <div className="relative group cursor-pointer" onClick={() => onPreview && onPreview(toPreviewUrl(url))}>
-          <img
-            className="w-full h-40 object-contain bg-slate-100"
-            src={toPreviewUrl(url)}
-            alt={label}
-          />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center pointer-events-none">
-            <ZoomIn className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
-          <button
-            className="absolute top-1.5 right-1.5 rounded-full bg-white/90 hover:bg-rose-50 p-1.5 shadow transition"
-            type="button"
-            title="移除照片"
-            onClick={(e) => { e.stopPropagation(); onRemove && onRemove(); }}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-          </button>
-        </div>
-      ) : busy ? (
-        <div className="flex flex-col items-center justify-center h-40 text-slate-400">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
-          <span className="text-xs mt-2">上传中...</span>
-        </div>
-      ) : (
-        <FileInput className="flex flex-col items-center justify-center h-40 text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors p-3">
-          <Plus className="h-6 w-6 mb-1" />
-          <span className="text-xs">{label}</span>
-        </FileInput>
-      )}
-      {error && (
-        <div className="px-3 py-1.5 text-xs text-rose-600 bg-rose-50">{error}</div>
-      )}
-      {url && !busy && (
-        <FileInput className="flex items-center justify-center gap-1 py-2 text-xs text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors">
-          <Plus className="h-3 w-3" />
-          <span>更新{sideLabel}</span>
-        </FileInput>
-      )}
-      {url && busy && (
-        <div className="flex items-center justify-center gap-1 py-2 text-xs text-slate-400">
-          <div className="h-3 w-3 animate-spin rounded-full border border-slate-300 border-t-blue-600" />
-          <span>上传中...</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function makeForm() {
-  const now = new Date();
-  const end = new Date(now);
-  end.setFullYear(end.getFullYear() + 1);
-  return {
-    name: "",
-    phone: "",
-    idNo: "",
-    building: "",
-    room: "",
-    leaseStart: now.toISOString().slice(0, 10),
-    leaseEnd: end.toISOString().slice(0, 10),
-    rent: "0",
-    deposit: "0",
-    status: "正常",
-    remind: true,
-    wechatGroupName: "",
-    wechatRemark: "",
-    notes: "",
-    idCardFront: "",
-    idCardBack: "",
-    feeItems: defaultFeeItems(),
-  };
-}
-
-function toForm(tenant) {
-  return {
-    name: tenant.name || "",
-    phone: tenant.phone || "",
-    idNo: tenant.idNo || "",
-    building: tenant.building || "",
-    room: tenant.room || "",
-    leaseStart: tenant.leaseStart || makeForm().leaseStart,
-    leaseEnd: tenant.leaseEnd || makeForm().leaseEnd,
-    rent: String(tenant.rent ?? 0),
-    deposit: String(tenant.deposit ?? 0),
-    status: tenant.status || "正常",
-    remind: tenant.remind ?? true,
-    wechatGroupName: tenant.wechatGroupName || "",
-    wechatRemark: tenant.wechatRemark || "",
-    notes: tenant.notes || "",
-    idCardFront: tenant.idCardFront || "",
-    idCardBack: tenant.idCardBack || "",
-    feeItems: Array.isArray(tenant.feeItems) && tenant.feeItems.length
-      ? tenant.feeItems.map((f, i) => ({
-          id: f.id || `fee-${i + 1}`,
-          name: f.name || "",
-          billingMode: f.billingMode || "固定费用",
-          unitPrice: String(f.unitPrice ?? 0),
-          unit: f.unit || "元/月",
-          initialReading: String(f.initialReading ?? 0),
-          hasMinimum: Boolean(f.hasMinimum),
-          minimumCharge: String(f.minimumCharge ?? 0),
-        }))
-      : defaultFeeItems(),
-  };
-}
+import IdPhotoCard from "../components/IdPhotoCard";
 
 const tenantSchema = z.object({
   name: z.string().min(1, "请输入租客姓名"),
