@@ -61,6 +61,32 @@ console.log("================================\n");
 const authSessions = new Map();
 const loginAttempts = new Map();
 
+// ── P1-1: 速率限制（Sliding Window） ──
+const RATE_WINDOW_MS  = Number(process.env.RATE_LIMIT_WINDOW_MS  || 60_000);
+const RATE_MAX_REQUESTS = Number(process.env.RATE_LIMIT_MAX_REQUESTS || 60);
+const requestTimestamps = new Map();
+
+function isRateLimited(ip) {
+  const now = Date.now();
+  const cutoff = now - RATE_WINDOW_MS;
+  const stamps = requestTimestamps.get(ip) || [];
+  const valid  = stamps.filter((t) => t > cutoff);
+  if (valid.length >= RATE_MAX_REQUESTS) {
+    requestTimestamps.set(ip, valid);
+    return true;
+  }
+  valid.push(now);
+  requestTimestamps.set(ip, valid);
+  return false;
+}
+
+function getRateLimitRemaining(ip) {
+  const now  = Date.now();
+  const cutoff = now - RATE_WINDOW_MS;
+  const stamps = (requestTimestamps.get(ip) || []).filter((t) => t > cutoff);
+  return Math.max(0, RATE_MAX_REQUESTS - stamps.length);
+}
+
 function ensureStorage() {
   if (!existsSync(storageDir)) mkdirSync(storageDir, { recursive: true });
   if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
@@ -140,13 +166,40 @@ function sendJson(response, statusCode, payload) {
     apiAllowedOrigins.includes("*") ||
     (reqOrigin && apiAllowedOrigins.some((allowed) => reqOrigin === allowed || reqOrigin.endsWith(allowed)));
   const finalOrigin = originAllowed ? reqOrigin || appOrigin : appOrigin;
-  response.writeHead(statusCode, {
+  const headers = {
+    // CORS
     "Access-Control-Allow-Origin": finalOrigin,
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    // ── P1-2: Security Headers ──
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-XSS-Protection": "1; mode=block",
+    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'self';",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    // ── P1-1: Rate Limit Headers ──
+    "X-RateLimit-Limit": String(RATE_MAX_REQUESTS),
+    "X-RateLimit-Remaining": String(getRateLimitRemaining(String(response.req?.socket?.remoteAddress || ""))),
+    "X-RateLimit-Window-Ms": String(RATE_WINDOW_MS),
+    // Content
     "Content-Type": "application/json; charset=utf-8",
-  });
+  };
+  response.writeHead(statusCode, headers);
   response.end(JSON.stringify(payload));
+}
+
+// ── P1-1: Global Rate Limit Check ──
+function checkRateLimit(ip) {
+  if (isRateLimited(ip)) {
+    return {
+      limited: true,
+      remaining: 0,
+      limit: RATE_MAX_REQUESTS,
+      windowMs: RATE_WINDOW_MS,
+    };
+  }
+  return { limited: false, remaining: getRateLimitRemaining(ip), limit: RATE_MAX_REQUESTS, windowMs: RATE_WINDOW_MS };
 }
 
 function parseBody(request) {
@@ -2036,9 +2089,26 @@ const server = http.createServer(async (request, response) => {
       "Access-Control-Allow-Origin": finalOrigin,
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      // P1-2 Security Headers
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "SAMEORIGIN",
+      "Content-Security-Policy": "default-src 'self'; frame-ancestors 'self';",
     });
     response.end();
     return;
+  }
+
+  // ── P1-1: 全域速率限制檢查 ──
+  const ip = String(request.socket?.remoteAddress || "");
+  const rl = checkRateLimit(ip);
+  if (rl.limited) {
+    writeRuntimeLog("warn", "rate_limit.exceeded", { ip: toMaskedIp(ip) });
+    return sendJson(response, 429, {
+      success: false,
+      message: "請求太頻繁，請稍後再試",
+      rateLimit: { limited: true, limit: rl.limit, windowMs: rl.windowMs },
+    });
   }
 
   const url = new URL(request.url, `http://${request.headers.host}`);
