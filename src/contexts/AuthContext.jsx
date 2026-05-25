@@ -1,11 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { apiEnabled, apiLogin, fetchMe } from "../lib/api";
+import { apiEnabled, apiLogin, fetchMe, setAuthToken } from "../lib/api";
 import { demoUser, loginGuide } from "../lib/mock-data";
 
 const AuthContext = createContext();
-// P1-1: token now managed via HttpOnly cookie only
-const TOKEN_KEY = "income-local-token";
-const USER_KEY = "income-local-user";
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -68,8 +65,10 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
-      // P1-1: localStorage.setItem(TOKEN_KEY, authPayload.token); // removed - token via HttpOnly cookie
-      // P1-1: localStorage.setItem(USER_KEY, JSON.stringify(authPayload.user)); // removed - user via /api/auth/me
+      // 儲存 token 供後續 API 請求使用
+      if (authPayload.token) {
+        setAuthToken(authPayload.token);
+      }
       setIsAuthenticated(true);
       setUser(authPayload.user);
 
@@ -83,8 +82,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    // P1-1: localStorage.removeItem(TOKEN_KEY); // removed - cookie handled by server
-    // P1-1: localStorage.removeItem(USER_KEY); // removed - cookie handled by server
+    setAuthToken("");
     setIsAuthenticated(false);
     setUser(null);
   };

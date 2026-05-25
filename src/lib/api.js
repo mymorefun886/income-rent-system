@@ -8,20 +8,27 @@ export const API_BASE_URL = apiBaseUrl;
 
 export const apiEnabled = Boolean(apiBaseUrl);
 
-// P1-3: 讀取 HttpOnly Cookie 中的 session token
-function getCookieToken() {
-  if (typeof document === "undefined") return "";
-  const match = document.cookie.match(/(?:^|;\s*)income-session=([^;]*)/);
-  return match ? match[1] : "";
+// 記憶體內 token（login 後寫入，頁面重整後從 sessionStorage 恢復）
+const TOKEN_KEY = "income-session-token";
+let authToken = (() => {
+  if (typeof sessionStorage !== "undefined") {
+    return sessionStorage.getItem(TOKEN_KEY) || "";
+  }
+  return "";
+})();
+
+export function setAuthToken(token) {
+  authToken = token || "";
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch {}
 }
 
 function getHeaders(extraHeaders = {}) {
-  // 從 HttpOnly Cookie 讀取 token
-  const token = getCookieToken() || "";
-
   return {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     ...extraHeaders,
   };
 }
@@ -48,10 +55,15 @@ async function request(path, options = {}) {
 }
 
 export async function apiLogin(username, password) {
-  return request("/api/auth/login", {
+  const result = await request("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
+  // 後端回傳 token 在 body 中，存到記憶體供後續請求使用
+  if (result.token) {
+    setAuthToken(result.token);
+  }
+  return result;
 }
 
 export async function fetchDashboard() {
