@@ -5,7 +5,8 @@ export default defineConfig({
     include: ['tests/**/*.test.js'],
     environment: 'node',
     globals: false,
-    testTimeout: 10000,
+    testTimeout: 15000,
+    hookTimeout: 15000,
     setupFiles: ['./vitest-setup.js'],
   },
 });

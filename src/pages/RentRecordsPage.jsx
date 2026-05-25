@@ -20,151 +20,24 @@ import {
 } from "../lib/api";
 import { rentRecords as fallbackRecords } from "../lib/mock-data";
 import { formatCurrency, formatDate, getStatusTone } from "../lib/format";
+import {
+  defaultForm,
+  normalizeKey,
+  normalizeRoomMatch,
+  makeRoomKey,
+  parseRoomText,
+  applyMeterAutoFields,
+  applyOtherFeeParts,
+  recalcReceivable,
+  getTenantFeeDefaults,
+  pickMinPrice,
+  isFactoryRoom,
+} from "../lib/recordUtils";
 import ConfirmDialog from "../components/ConfirmDialog";
+import QuickPayModal from "../components/QuickPayModal";
+import RecordFormModal from "../components/RecordFormModal";
 import { useProperties, useRecords, useSettings, useTenants } from "../hooks/useApiQuery";
 import { useQueryClient } from "@tanstack/react-query";
-
-const defaultForm = () => ({
-  tenant: "",
-  tenantId: "",
-  room: "",
-  cycle: new Date().toISOString().slice(0, 7),
-  rentPart: "",
-  receivable: "0",
-  received: "0",
-  status: "未收",
-  method: "微信",
-  dueDate: `${new Date().toISOString().slice(0, 7)}-10`,
-  note: "",
-  electricPrev: "",
-  electricNow: "",
-  electricUsage: "",
-  electricPrice: "",
-  waterPrev: "",
-  waterNow: "",
-  waterUsage: "",
-  waterPrice: "",
-  waterMinimumCharge: "0",
-  propertyFee: "0",
-  networkFee: "0",
-  garbageFee: "0",
-  miscFee: "0",
-  otherFee: "0",
-  depositAdjustment: "0",
-});
-
-const DEFAULT_ELECTRIC_PRICE = 0.8;
-const DEFAULT_WATER_PRICE = 5.5;
-
-function normalizeKey(value) {
-  return String(value || "").replace(/\s+/g, "").toUpperCase();
-}
-
-function normalizeRoomMatch(value) {
-  return String(value || "")
-    .replace(/\s+/g, "")
-    .replace(/[-－_]/g, "")
-    .toUpperCase();
-}
-
-function makeRoomKey(building, room) {
-  return `${String(building || "").trim()}::${normalizeKey(room)}`;
-}
-
-function parseRoomText(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return { building: "", room: "" };
-  // 兼容 "西山东区17号 - 101" 和 "西山东区17号 101"
-  const m = raw.match(/^(.*?)\s*[-－]\s*(.+)$/);
-  if (m) return { building: m[1].trim(), room: m[2].trim() };
-  const idx = raw.lastIndexOf(" ");
-  if (idx < 0) return { building: "", room: raw };
-  return { building: raw.slice(0, idx).trim(), room: raw.slice(idx + 1).trim() };
-}
-
-function isFactoryRoom(formLike) {
-  return Boolean(formLike?.noWaterMeter);
-}
-
-function applyMeterAutoFields(formLike) {
-  const next = { ...formLike };
-  const ePrev = Number(next.electricPrev || 0);
-  const eNow = Number(next.electricNow || 0);
-  const wPrev = Number(next.waterPrev || 0);
-  const wNow = Number(next.waterNow || 0);
-  const wPrice = Number(next.waterPrice || 0);
-
-  const eUsage = Math.max(0, eNow - ePrev);
-  const wUsage = Math.max(0, wNow - wPrev);
-
-  next.electricUsage = String(Number.isFinite(eUsage) ? eUsage : 0);
-  next.waterUsage = String(Number.isFinite(wUsage) ? wUsage : 0);
-  const disableMinimum = isFactoryRoom(next);
-  // 水费保底: 不满1方按1方计算, 补足差额
-  next.waterMinimumCharge = String(disableMinimum ? 0 : (wUsage < 1 ? Math.round(((1 - wUsage) * (Number.isFinite(wPrice) ? wPrice : 0)) * 100) / 100 : 0));
-  return next;
-}
-
-function applyOtherFeeParts(formLike) {
-  const next = { ...formLike };
-  const total =
-    Number(next.propertyFee || 0) +
-    Number(next.networkFee || 0) +
-    Number(next.garbageFee || 0) +
-    Number(next.miscFee || 0);
-  next.otherFee = String(Number.isFinite(total) ? total : 0);
-  return next;
-}
-
-function recalcReceivable(formLike) {
-  const next = { ...formLike };
-  const rentPart = Number(next.rentPart || 0);
-  const electricUsage = Number(next.electricUsage || 0);
-  const electricPrice = Number(next.electricPrice || 0);
-  const waterUsage = Number(next.waterUsage || 0);
-  const waterPrice = Number(next.waterPrice || 0);
-  const waterMinimumCharge = Number(next.waterMinimumCharge || 0);
-  const otherFee = Number(next.otherFee || 0);
-  const depositAdjustment = Number(next.depositAdjustment || 0);
-  const receivable = rentPart + electricUsage * electricPrice + waterUsage * waterPrice + waterMinimumCharge + otherFee + depositAdjustment;
-  next.receivable = String(Math.round(receivable));
-  return next;
-}
-
-function pickFeeItem(tenant, patterns) {
-  const feeItems = Array.isArray(tenant?.feeItems) ? tenant.feeItems : [];
-  return feeItems.find((f) => patterns.some((re) => re.test(String(f?.name || ""))));
-}
-
-function pickValidPrice(value, fallback) {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? String(n) : String(fallback);
-}
-
-function pickMinPrice(value, minValue) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return String(minValue);
-  return String(n < minValue ? minValue : n);
-}
-
-function getTenantFeeDefaults(tenant) {
-  const electric = pickFeeItem(tenant, [/电/i, /electric/i]);
-  const water = pickFeeItem(tenant, [/水/i, /water/i]);
-  const propertyFee = pickFeeItem(tenant, [/物业/i]);
-  const networkFee = pickFeeItem(tenant, [/网络/i, /宽带/i, /wifi/i]);
-  const garbageFee = pickFeeItem(tenant, [/税费/i, /垃圾/i]);
-  const miscFee = pickFeeItem(tenant, [/其他/i]);
-  return {
-    electricPrice: pickValidPrice(electric?.unitPrice, DEFAULT_ELECTRIC_PRICE),
-    waterPrice: pickValidPrice(water?.unitPrice, DEFAULT_WATER_PRICE),
-    electricInitial: electric?.initialReading ?? "",
-    waterInitial: water?.initialReading ?? "",
-    propertyFee: propertyFee?.unitPrice ?? "0",
-    networkFee: networkFee?.unitPrice ?? "0",
-    garbageFee: garbageFee?.unitPrice ?? "0",
-    miscFee: miscFee?.unitPrice ?? "0",
-  };
-}
 
 const RentRecordsPage = () => {
   const queryClient = useQueryClient();
@@ -226,12 +99,7 @@ const RentRecordsPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [roomFilter, setRoomFilter] = useState("all");
   const [quickPayTarget, setQuickPayTarget] = useState(null);
-  const [quickPayAmount, setQuickPayAmount] = useState("");
-  const [quickPayMethod, setQuickPayMethod] = useState("微信");
-  const [quickPayDate, setQuickPayDate] = useState(new Date().toISOString().slice(0, 10));
-  const [quickPayNote, setQuickPayNote] = useState("");
   const [flashRowId, setFlashRowId] = useState("");
-  const [quickPayError, setQuickPayError] = useState("");
   const [billImages, setBillImages] = useState([]);
   const [generatingImages, setGeneratingImages] = useState(false);
   const [csvPasteText, setCsvPasteText] = useState("");
@@ -545,35 +413,7 @@ const RentRecordsPage = () => {
   }, [formOpen, form.tenantId, form.tenant, tenants]);
 
   function openQuickPay(item) {
-    const due = Number(item.receivable || 0);
-    const paid = Array.isArray(item.payments) ? item.payments.reduce((s, p) => s + Number(p.amount || 0), 0) : Number(item.received || 0);
     setQuickPayTarget(item);
-    setQuickPayAmount(String(Math.max(0, due - paid)));
-    setQuickPayMethod("微信");
-    setQuickPayDate(new Date().toISOString().slice(0, 10));
-    setQuickPayNote("");
-    setQuickPayError("");
-  }
-
-  async function confirmQuickPay() {
-    if (!quickPayTarget) return;
-    const amount = Number(quickPayAmount || 0);
-    if (!(amount > 0)) { setQuickPayError("请输入收款金额"); return; }
-    try {
-      const paid = Array.isArray(quickPayTarget.payments) ? quickPayTarget.payments.reduce((s, p) => s + Number(p.amount || 0), 0) : Number(quickPayTarget.received || 0);
-      const newPaid = paid + amount;
-      const payments = Array.isArray(quickPayTarget.payments) ? [...quickPayTarget.payments] : [];
-      payments.push({ id: `pay-${Date.now()}`, amount, paidAt: quickPayDate, method: quickPayMethod, note: quickPayNote || "快速收款" });
-      const payload = { ...quickPayTarget, payments, received: newPaid, paidAt: quickPayDate };
-      if (Number(payload.receivable || 0) > 0 && newPaid >= Number(payload.receivable || 0)) payload.status = "已收";
-      else if (newPaid > 0) payload.status = "部份收取";
-      const saved = await updateRecord(quickPayTarget.id, payload);
-      setRecords((prev) => prev.map((x) => (x.id === quickPayTarget.id ? saved : x)));
-      setQuickPayTarget(null);
-      setFlashRowId(quickPayTarget.id);
-      setTimeout(() => setFlashRowId(""), 1500);
-      setQuickPayError("");
-    } catch (e) { setQuickPayError(e.message || "收款失败"); }
   }
 
   async function saveRecord() {
@@ -1239,56 +1079,26 @@ const RentRecordsPage = () => {
         </div>
       ) : null}
 
-      {quickPayTarget ? (() => {
-        const paidTotal = Array.isArray(quickPayTarget.payments) ? quickPayTarget.payments.reduce((s,p)=>s+Number(p.amount||0),0) : Number(quickPayTarget.received||0);
-        const unpaid = Math.max(0, Number(quickPayTarget.receivable||0) - paidTotal);
-        const historyPayments = Array.isArray(quickPayTarget.payments) ? quickPayTarget.payments : [];
-        return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold">快速收款</h3>
-            <p className="text-sm text-slate-500">{quickPayTarget.room} · {quickPayTarget.tenant} · {quickPayTarget.cycle}</p>
-            {quickPayError && <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{quickPayError}</div>}
-            <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm">
-              <div className="flex justify-between"><span>应收</span><span className="font-bold">{formatCurrency(quickPayTarget.receivable||0)}</span></div>
-              <div className="flex justify-between"><span>已收</span><span>{formatCurrency(paidTotal)}</span></div>
-              <div className="flex justify-between border-t border-slate-200 pt-1 mt-1"><span>未收</span><span className="font-bold text-rose-600">{formatCurrency(unpaid)}</span></div>
-            </div>
-            <div className="mt-3 flex items-end gap-2">
-              <label className="flex-1 text-sm">本次收款金额
-                <input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-lg font-bold" type="number" value={quickPayAmount} onChange={(e) => setQuickPayAmount(e.target.value)} autoFocus />
-              </label>
-              <button className="rounded-xl border border-emerald-300 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50" type="button" onClick={() => setQuickPayAmount(String(unpaid))}>收全款</button>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <label className="text-sm">方式
-                <select className="mt-1 w-full rounded-xl border border-slate-300 px-2 py-2" value={quickPayMethod} onChange={(e) => setQuickPayMethod(e.target.value)}>
-                  {["微信","支付宝","银行转账","现金"].map(m=><option key={m}>{m}</option>)}
-                </select>
-              </label>
-              <label className="text-sm">日期
-                <input className="mt-1 w-full rounded-xl border border-slate-300 px-2 py-2" type="date" value={quickPayDate} onChange={(e) => setQuickPayDate(e.target.value)} onBlur={(e) => setQuickPayDate(e.target.value)} />
-              </label>
-            </div>
-            <label className="mt-2 block text-sm">备注
-              <input className="mt-1 w-full rounded-xl border border-slate-300 px-2 py-2" value={quickPayNote} onChange={(e) => setQuickPayNote(e.target.value)} placeholder="可不填" />
-            </label>
-            {historyPayments.length > 0 && (
-              <div className="mt-3 rounded-xl border border-slate-100 p-2 text-xs">
-                <div className="text-slate-500 mb-1">已收记录</div>
-                {historyPayments.map((p, i) => (
-                  <div key={i} className="flex justify-between py-0.5"><span>{p.paidAt||"-"} · {p.method||"-"}</span><span className="font-semibold">{formatCurrency(p.amount||0)}</span></div>
-                ))}
-              </div>
-            )}
-            <div className="mt-4 flex gap-2">
-              <button className="flex-1 rounded-xl border border-slate-300 py-2" type="button" onClick={() => setQuickPayTarget(null)}>取消</button>
-              <button className="flex-1 rounded-xl bg-emerald-600 py-2 text-white font-semibold" type="button" onClick={confirmQuickPay}>确认收款 ¥{Number(quickPayAmount||0).toFixed(0)}</button>
-            </div>
-          </div>
-        </div>
-        );
-      })() : null}
+      {quickPayTarget ? (
+        <QuickPayModal
+          target={quickPayTarget}
+          onClose={() => setQuickPayTarget(null)}
+          onConfirm={async ({ amount, method, date, note }) => {
+            const paid = Array.isArray(quickPayTarget.payments) ? quickPayTarget.payments.reduce((s, p) => s + Number(p.amount || 0), 0) : Number(quickPayTarget.received || 0);
+            const newPaid = paid + amount;
+            const payments = Array.isArray(quickPayTarget.payments) ? [...quickPayTarget.payments] : [];
+            payments.push({ id: `pay-${Date.now()}`, amount, paidAt: date, method, note });
+            const payload = { ...quickPayTarget, payments, received: newPaid, paidAt: date };
+            if (Number(payload.receivable || 0) > 0 && newPaid >= Number(payload.receivable || 0)) payload.status = "已收";
+            else if (newPaid > 0) payload.status = "部份收取";
+            const saved = await updateRecord(quickPayTarget.id, payload);
+            setRecords((prev) => prev.map((x) => (x.id === quickPayTarget.id ? saved : x)));
+            setQuickPayTarget(null);
+            setFlashRowId(quickPayTarget.id);
+            setTimeout(() => setFlashRowId(""), 1500);
+          }}
+        />
+      ) : null}
 
       {singleCard ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSingleCard(null)}>
