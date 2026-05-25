@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Download, Printer, RefreshCw, Send, Upload } from "lucide-react";
 import { apiEnabled, createRecord, fetchProperties, fetchRecords, fetchTenants, updateRecord } from "../lib/api";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 function makeRoomKey(b, r) { return (b||"").trim()+"::"+(r||"").replace(/\s+/g,"").toUpperCase(); }
 
@@ -16,6 +17,17 @@ export default function MeterInputPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [csvPasteText, setCsvPasteText] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  function handleSyncClick() {
+    if (cycle !== currentMonth) {
+      setConfirmOpen(true);
+    } else {
+      syncToSystem();
+    }
+  }
 
   function applyCsvRows(rows) {
     const next = { ...readings };
@@ -317,13 +329,24 @@ export default function MeterInputPage() {
       <div className="sticky bottom-2 bg-white rounded-2xl p-3 shadow-lg ring-1 ring-slate-200 space-y-2">
         <div className="flex gap-2">
           <button className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-medium" onClick={() => { setReadings({}); localStorage.removeItem(STORAGE_KEY); setSavedCount(0); }}>清空读数</button>
-          <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={syncToSystem}><Send className="inline h-4 w-4 mr-1" />{saving?"同步中...":"一键同步"}</button>
+          <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={handleSyncClick}><Send className="inline h-4 w-4 mr-1" />{saving?"同步中...":"一键同步"}</button>
         </div>
         <div className="flex gap-2">
           <button className="flex-1 rounded-xl bg-emerald-50 border border-emerald-200 py-2.5 text-sm font-medium text-emerald-700" onClick={downloadMeterHtml}><Download className="inline h-4 w-4 mr-1" />下载离线页</button>
           <button className="flex-1 rounded-xl bg-amber-50 border border-amber-200 py-2.5 text-sm font-medium text-amber-700" onClick={printMeterTemplate}><Printer className="inline h-4 w-4 mr-1" />打印抄表模板</button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="确认同步账期"
+        message={`您选择的账期为 ${cycle}，并非当前月份（${currentMonth}），确认要将抄表数据同步到此账期吗？同步将覆盖该月份的现有电费/水费数据。`}
+        confirmText="确认同步"
+        cancelText="取消"
+        tone="warn"
+        onConfirm={() => { setConfirmOpen(false); syncToSystem(); }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }
