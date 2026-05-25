@@ -9,7 +9,7 @@ services:
       APP_ORIGIN: https://income.ccwu.cc
       API_ALLOWED_ORIGINS: https://income.ccwu.cc,https://income-rent-system.pages.dev
       ADMIN_USERNAME: morefun886
-      ADMIN_PASSWORD_HASH: "pbkdf2-sha256$120000$d5a2b5105fc67d6f71ebcbd82db7c63a$6e7169008e0bd6c95c5249eae9b9c45316ffba8a49c533b9635888189d5d83e3"
+      ADMIN_PASSWORD_HASH: "pbkdf2-sha256$$120000$$c10e047b796f6ff757ecb69d3b0820e5$$$0ccdda56aaf327f217f7b1e4e8e60438e17d38d6b31b207fbef73e05b3cf88dc"
       JWT_SECRET: "f51c004a4f90aa9f211ec35a772bfd65effff0c0efd774fd58a15fd896004c77"
       UPLOAD_MAX_MB: 10
       BACKUP_DIR: /app/storage/backups
