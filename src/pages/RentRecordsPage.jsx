@@ -32,6 +32,8 @@ import {
   getTenantFeeDefaults,
   pickMinPrice,
   isFactoryRoom,
+  DEFAULT_ELECTRIC_PRICE,
+  DEFAULT_WATER_PRICE,
 } from "../lib/recordUtils";
 import ConfirmDialog from "../components/ConfirmDialog";
 import QuickPayModal from "../components/QuickPayModal";
