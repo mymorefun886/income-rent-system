@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { apiEnabled, apiLogin, fetchMe, setAuthToken, getStoredUser, setStoredUser } from "../lib/api";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { apiEnabled, apiLogin, apiLogout, fetchMe, setAuthToken, getStoredUser, setStoredUser } from "../lib/api";
 import { demoUser, loginGuide } from "../lib/mock-data";
 
 const AuthContext = createContext();
@@ -43,6 +43,16 @@ export const AuthProvider = ({ children }) => {
     } else {
       setLoading(false);
     }
+  }, []);
+
+  // 監聽全域 401 事件：API 回 401 時自動登出
+  useEffect(() => {
+    const handleExpired = () => {
+      setIsAuthenticated(false);
+      setUser(null);
+    };
+    window.addEventListener("auth:expired", handleExpired);
+    return () => window.removeEventListener("auth:expired", handleExpired);
   }, []);
 
   const login = async (username, password) => {
@@ -94,12 +104,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    setAuthToken("");
-    setStoredUser(null);
+  const logout = useCallback(async () => {
+    await apiLogout();
     setIsAuthenticated(false);
     setUser(null);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider

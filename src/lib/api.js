@@ -52,6 +52,21 @@ function getHeaders(extraHeaders = {}) {
   };
 }
 
+function clearAuth() {
+  authToken = "";
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  try { sessionStorage.removeItem(USER_KEY); } catch {}
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("auth:expired"));
+  }
+}
+
+function clearStorage() {
+  authToken = "";
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  try { sessionStorage.removeItem(USER_KEY); } catch {}
+}
+
 async function request(path, options = {}) {
   if (!apiEnabled) {
     throw new Error("未配置后端地址 VITE_API_BASE_URL");
@@ -65,6 +80,10 @@ async function request(path, options = {}) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || payload.success === false) {
+    // 401 → token 過期，清除 auth 狀態並通知 AuthContext
+    if (response.status === 401 && authToken) {
+      clearAuth();
+    }
     const error = new Error(payload.message || "请求失败");
     error.status = response.status;
     throw error;
@@ -83,6 +102,15 @@ export async function apiLogin(username, password) {
     setAuthToken(result.token);
   }
   return result;
+}
+
+export async function apiLogout() {
+  try {
+    await request("/api/auth/logout", { method: "POST" });
+  } catch {
+    // 後端可能無此端點或已斷線，忽略錯誤
+  }
+  clearStorage();
 }
 
 export async function fetchDashboard() {
