@@ -353,7 +353,7 @@ const RentRecordsPage = () => {
       otherFee: String(item.otherFee ?? 0),
       depositAdjustment: String(item.depositAdjustment ?? 0),
       noWaterMeter: Boolean(item.noWaterMeter),
-      tenantStartDate: matchedTenant?.startDate || "",
+      tenantStartDate: matchedTenant?.leaseStart || "",
     });
     setFormOpen(true);
   }
@@ -369,7 +369,7 @@ const RentRecordsPage = () => {
       room,
       rentPart: String(Number(t.rent || 0)),
       receivable: String(Number(t.rent || 0)),
-      tenantStartDate: t.startDate || "",
+      tenantStartDate: t.leaseStart || "",
     }));
   }
 
@@ -404,7 +404,7 @@ const RentRecordsPage = () => {
       networkFee: String(feeDefaults.networkFee ?? prev.networkFee ?? "0"),
       garbageFee: String(feeDefaults.garbageFee ?? prev.garbageFee ?? "0"),
       miscFee: String(feeDefaults.miscFee ?? prev.miscFee ?? "0"),
-      tenantStartDate: tenant?.startDate || "",
+      tenantStartDate: tenant?.leaseStart || "",
     }))));
   }
 
@@ -417,6 +417,7 @@ const RentRecordsPage = () => {
     setForm((prev) => ({
       ...prev,
       tenantId: matched.id,
+      tenantStartDate: matched.leaseStart || "",
     }));
   }, [formOpen, form.tenantId, form.tenant, tenants]);
 
