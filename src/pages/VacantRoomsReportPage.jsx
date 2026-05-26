@@ -188,7 +188,7 @@ export default function VacantRoomsReportPage() {
         if (String(r.cycle||"").trim() === month) {
           const p = String(r.room||"").includes(" ") ? String(r.room||"").split(" ")[0] : "";
           const key = p ? `${p}::${normalizeRoomKey(r.room.split(" ").slice(1).join(" ") || r.room)}` : makeRoomKey("", r.room);
-          occupiedRooms.add(normalizeRoomMatch(r.room));
+          occupiedRooms.add(normalizeRoomKey(r.room));
         }
       });
 
@@ -219,7 +219,7 @@ export default function VacantRoomsReportPage() {
     const occupiedRooms = new Set();
     (records || []).forEach(r => {
       const cycle = String(r.cycle||"").trim();
-      if (cycle.startsWith(yearStr)) occupiedRooms.add(normalizeRoomMatch(r.room));
+      if (cycle.startsWith(yearStr)) occupiedRooms.add(normalizeRoomKey(r.room));
     });
     const occupiedCount = occupiedRooms.size;
     const avgRate = totalActiveRooms > 0 ? Math.max(0, ((totalActiveRooms - occupiedCount) / totalActiveRooms) * 100) : 0;
