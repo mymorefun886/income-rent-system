@@ -420,8 +420,9 @@ export default function VacantRoomsReportPage() {
           const buildGroups = (cycle) => {
             const [y, m] = (cycle || "").split("-").map(Number);
             if (!y || !m) return [];
+            const billCycle = `${y}-${String(m+1).padStart(2,"0")}`; // 用量月+1=出账月
             const recs = records.filter(r => String(r.cycle||"").trim() === cycle);
-            const exps = expenses.filter(e => String(e.period||"").trim() === cycle);
+            const exps = expenses.filter(e => String(e.period||"").trim() === billCycle);
             // 窮舉所有樓棟（来自 properties），不用 filter 過濾
             const groups = new Map();
             (properties||[]).forEach(p => {
@@ -466,7 +467,7 @@ export default function VacantRoomsReportPage() {
               <div className="flex items-center gap-3 mb-4">
                 <span className="text-sm">用量月份</span>
                 <input className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm" type="month" value={utilCycle} onChange={e => setUtilCycle(e.target.value)} />
-                <span className="text-xs text-slate-500">（records.cycle = 用量月；expenses.period = 實際帳單月，向租客收取的水電費已包含空置/自用房用量）</span>
+                <span className="text-xs text-slate-500">（records.cycle = 用量月；expenses.period = 實際帳單月，需在次月出帳後才顯示差额）</span>
               </div>
               {utilGroups.map(g => (
                 <div key={g.building} className="mb-4 rounded-2xl bg-[#f8fdff] p-4 ring-1 ring-[#d8f1f8]">
