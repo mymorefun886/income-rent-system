@@ -435,7 +435,8 @@ export default function VacantRoomsReportPage() {
                 return !!t;
               });
               const selfOrVacant = rooms.length - rented.length;
-              groups.set(bld, { building: bld, elecUsage: 0, waterUsage: 0, elecIncome: 0, waterIncome: 0, elecBill: 0, waterBill: 0, totalRooms: rooms.length, rentedCount: rented.length, selfOrVacantCount: selfOrVacant });
+              const allSelfUse = rooms.length > 0 && rooms.every(pp => String(pp.usageType || "") === "自用（不出租）");
+              groups.set(bld, { building: bld, elecUsage: 0, waterUsage: 0, elecIncome: 0, waterIncome: 0, elecBill: 0, waterBill: 0, totalRooms: rooms.length, rentedCount: rented.length, selfOrVacantCount: selfOrVacant, allSelfUse });
             });
             // 填入 records 用量和收入
             recs.forEach(r => {
@@ -461,7 +462,7 @@ export default function VacantRoomsReportPage() {
             });
             return Array.from(groups.values());
           };
-          const utilGroups = buildGroups(utilCycle);
+          const utilGroups = buildGroups(utilCycle).sort((a, b) => (a.allSelfUse ? 1 : 0) - (b.allSelfUse ? 1 : 0));
           return (
             <div className="mt-4">
               <div className="flex items-center gap-3 mb-4">
