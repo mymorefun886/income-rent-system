@@ -439,7 +439,7 @@ const RentRecordsPage = () => {
         setError("该房间为自用（不出租），不能创建或保存收租账单");
         return;
       }
-      const computed = recalcReceivable(applyOtherFeeParts(applyMeterAutoFields(form, waterMinimumEdited ? form.waterMinimumCharge : undefined)));
+      const computed = recalcReceivable(applyOtherFeeParts(applyMeterAutoFields(form, form.waterMinimumCharge)));
       const payload = {
         ...(editing || {}),
         ...computed,
