@@ -413,7 +413,7 @@ export default function VacantRoomsReportPage() {
               </table>
             </div>
           </div>
-        )}
+        ) : null}
 
         {tab === "utility" ? (() => {
           // 水电对账计算
@@ -437,16 +437,16 @@ export default function VacantRoomsReportPage() {
               const selfOrVacant = rooms.length - rented.length;
               groups.set(bld, { building: bld, elecUsage: 0, waterUsage: 0, elecIncome: 0, waterIncome: 0, elecBill: 0, waterBill: 0, totalRooms: rooms.length, rentedCount: rented.length, selfOrVacantCount: selfOrVacant });
             });
-            // 填入 records 用量
+            // 填入 records 用量和收入
             recs.forEach(r => {
               const bld = r.building || (String(r.room||"").includes(" ") ? String(r.room||"").split(" ")[0] : "");
               if (!bld || !groups.has(bld)) return;
               const g = groups.get(bld);
               g.elecUsage += Number(r.electricUsage||0);
               g.waterUsage += Number(r.waterUsage||0);
-              // income 只算有綁定租客的房
-              const roomKey = `${String(r.building||"").trim()}::${normalizeRoomKey(String(r.room||"").replace(String(r.building||"")+" ",""))}`;
-              const hasTenant = tenants.some(t => !t.archived && `${String(t.building||"").trim()}::${normalizeRoomKey(t.room)}` === roomKey);
+              // 向租客收取：從 record 的 receivable 反推水電部分
+              // 簡化：電費 = electricUsage * electricPrice；水費 = waterUsage * waterPrice + waterMinimumCharge
+              const hasTenant = (r.tenant||"").trim() !== "";
               if (hasTenant) {
                 g.elecIncome += Math.round(Number(r.electricUsage||0) * Number(r.electricPrice||0));
                 g.waterIncome += Math.round((Number(r.waterUsage||0) * Number(r.waterPrice||0) + Number(r.waterMinimumCharge||0)) * 100) / 100;
