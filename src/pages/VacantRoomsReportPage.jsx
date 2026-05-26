@@ -317,7 +317,7 @@ export default function VacantRoomsReportPage() {
               </table>
             </div>
           </div>
-        ) : (
+        ) : tab === "rate" ? (
           <div className="mt-4 space-y-4">
             <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-[#f8fdff] px-3 py-3 ring-1 ring-[#d8f1f8]">
               <button className="rounded-lg bg-[#0077b6] px-3 py-2 text-sm text-white" type="button">
@@ -448,7 +448,7 @@ export default function VacantRoomsReportPage() {
               // 簡化：電費 = electricUsage * electricPrice；水費 = waterUsage * waterPrice + waterMinimumCharge
               const hasTenant = (r.tenant||"").trim() !== "";
               if (hasTenant) {
-                g.elecIncome += Math.round(Number(r.electricUsage||0) * Number(r.electricPrice||0));
+                g.elecIncome += Math.round(Number(r.electricUsage||0) * Number(r.electricPrice||0) * 100) / 100;
                 g.waterIncome += Math.round((Number(r.waterUsage||0) * Number(r.waterPrice||0) + Number(r.waterMinimumCharge||0)) * 100) / 100;
               }
             });
