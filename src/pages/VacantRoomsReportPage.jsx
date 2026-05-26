@@ -420,24 +420,40 @@ export default function VacantRoomsReportPage() {
           const buildGroups = (cycle) => {
             const [y, m] = (cycle || "").split("-").map(Number);
             if (!y || !m) return [];
-            const billCycle = `${y}-${String(m+1).padStart(2,"0")}`; // 用量月+1=出账月
             const recs = records.filter(r => String(r.cycle||"").trim() === cycle);
-            const exps = expenses.filter(e => String(e.period||"").trim() === billCycle);
+            const exps = expenses.filter(e => String(e.period||"").trim() === cycle);
+            // 窮舉所有樓棟（来自 properties），不用 filter 過濾
             const groups = new Map();
+            (properties||[]).forEach(p => {
+              const bld = String(p.building||"").trim() || "";
+              if (!bld || groups.has(bld)) return;
+              const rooms = (properties||[]).filter(x => String(x.building||"").trim() === bld);
+              const rented = rooms.filter(pp => {
+                const key = `${String(pp.building||"").trim()}::${normalizeRoomKey(pp.room)}`;
+                const t = tenants.find(t => !t.archived && `${String(t.building||"").trim()}::${normalizeRoomKey(t.room)}` === key);
+                return !!t;
+              });
+              const selfOrVacant = rooms.length - rented.length;
+              groups.set(bld, { building: bld, elecUsage: 0, waterUsage: 0, elecIncome: 0, waterIncome: 0, elecBill: 0, waterBill: 0, totalRooms: rooms.length, rentedCount: rented.length, selfOrVacantCount: selfOrVacant });
+            });
+            // 填入 records 用量
             recs.forEach(r => {
               const bld = r.building || (String(r.room||"").includes(" ") ? String(r.room||"").split(" ")[0] : "");
-              if (!bld) return;
-              if (!groups.has(bld)) groups.set(bld, { building: bld, elecUsage: 0, waterUsage: 0, elecIncome: 0, waterIncome: 0, elecBill: 0, waterBill: 0 });
+              if (!bld || !groups.has(bld)) return;
               const g = groups.get(bld);
               g.elecUsage += Number(r.electricUsage||0);
               g.waterUsage += Number(r.waterUsage||0);
-              g.elecIncome += Math.round(Number(r.electricUsage||0) * Number(r.electricPrice||0));
-              g.waterIncome += Math.round((Number(r.waterUsage||0) * Number(r.waterPrice||0) + Number(r.waterMinimumCharge||0)) * 100) / 100;
+              // income 只算有綁定租客的房
+              const roomKey = `${String(r.building||"").trim()}::${normalizeRoomKey(String(r.room||"").replace(String(r.building||"")+" ",""))}`;
+              const hasTenant = tenants.some(t => !t.archived && `${String(t.building||"").trim()}::${normalizeRoomKey(t.room)}` === roomKey);
+              if (hasTenant) {
+                g.elecIncome += Math.round(Number(r.electricUsage||0) * Number(r.electricPrice||0));
+                g.waterIncome += Math.round((Number(r.waterUsage||0) * Number(r.waterPrice||0) + Number(r.waterMinimumCharge||0)) * 100) / 100;
+              }
             });
             exps.forEach(e => {
               const bld = String(e.propertyLabel||"").replace("（整栋）","").trim();
-              if (!bld) return;
-              if (!groups.has(bld)) groups.set(bld, { building: bld, elecUsage: 0, waterUsage: 0, elecIncome: 0, waterIncome: 0, elecBill: 0, waterBill: 0 });
+              if (!bld || !groups.has(bld)) return;
               const g = groups.get(bld);
               if (String(e.category||"").includes("电")) g.elecBill += Number(e.amount||0);
               if (String(e.category||"").includes("水")) g.waterBill += Number(e.amount||0);
@@ -450,11 +466,11 @@ export default function VacantRoomsReportPage() {
               <div className="flex items-center gap-3 mb-4">
                 <span className="text-sm">用量月份</span>
                 <input className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm" type="month" value={utilCycle} onChange={e => setUtilCycle(e.target.value)} />
-                <span className="text-xs text-slate-500">（账单在次月支出台账录入）</span>
+                <span className="text-xs text-slate-500">（records.cycle = 用量月；expenses.period = 實際帳單月，向租客收取的水電費已包含空置/自用房用量）</span>
               </div>
               {utilGroups.map(g => (
                 <div key={g.building} className="mb-4 rounded-2xl bg-[#f8fdff] p-4 ring-1 ring-[#d8f1f8]">
-                  <div className="font-semibold text-slate-900 mb-3">{g.building}</div>
+                  <div className="font-semibold text-slate-900 mb-3">{g.building} <span className="font-normal text-slate-400 text-xs">含 {g.totalRooms} 間房（出租 {g.rentedCount} 間，自用/空置 {g.selfOrVacantCount} 間）</span></div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>
                       <div className="text-xs text-slate-500 mb-2">⚡ 电费</div>

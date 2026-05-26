@@ -117,7 +117,6 @@ export default function MeterInputPage() {
       if (!p || String(r.cycle||"") > String(p.cycle||"")) lastMap.set(key, { e: r.electricNow||"", w: r.waterNow||"" });
     });
     return properties
-      .filter(p => usageMap.get(makeRoomKey(p.building,p.room)) !== "自用（不出租）")
       .sort((a,b) => {
         const bc = String(a.building||"").localeCompare(String(b.building||""),"zh-Hans-CN");
         if (bc) return bc;
@@ -192,9 +191,9 @@ export default function MeterInputPage() {
         else payload.status = "未收";
 
         if (existing) { await updateRecord(existing.id, { ...existing, ...payload, id: existing.id }); updated++; }
-        else { await createRecord(payload); created++; }
+        else if (tenant) { await createRecord(payload); created++; }
       }
-      setMsg(`同步完成：更新 ${updated} 条，新建 ${created} 条`);
+      setMsg(`同步完成：更新 ${updated} 条，新建 ${created} 条（自用/空置房跳过）`);
       localStorage.removeItem(STORAGE_KEY);
       setReadings({});
       setSavedCount(0);

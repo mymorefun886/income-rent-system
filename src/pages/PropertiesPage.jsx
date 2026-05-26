@@ -107,6 +107,21 @@ export default function PropertiesPage() {
     return m;
   }, [tenants]);
 
+  const archivedLeaseEndMap = useMemo(() => {
+    const m = new Map();
+    (tenants || []).forEach((t) => {
+      const isArchived = t.archived === true || String(t.archived || "").trim().toLowerCase() === "true" ||
+        String(t.archived || "").trim() === "1" || String(t.status || "").trim() === "历史租客";
+      if (!isArchived) return;
+      const key = `${String(t.building || "").trim()}::${normalizeRoomKey(t.room)}`;
+      const leaseEndMs = t.leaseEnd ? new Date(String(t.leaseEnd).trim()).getTime() : 0;
+      if (!leaseEndMs || Number.isNaN(leaseEndMs)) return;
+      const prev = m.get(key) || 0;
+      if (leaseEndMs > prev) m.set(key, leaseEndMs);
+    });
+    return m;
+  }, [tenants]);
+
   const metrics = useMemo(() => {
     const total = properties.length;
     const selfUse = properties.filter((p) => String(p.usageType || "") === "自用（不出租）").length;
@@ -137,6 +152,15 @@ export default function PropertiesPage() {
           else if (paid > 0) payStatus = { label: `部分 ¥${paid.toFixed(0)}/¥${due.toFixed(0)}`, cls: "text-amber-600" };
           else payStatus = { label: "待收", cls: "text-rose-600" };
         }
+        let vacantDays = 0;
+        if (!isSelfUse && !tenant) {
+          const leaseEndMs = archivedLeaseEndMap.get(key);
+          if (leaseEndMs) {
+            vacantDays = Math.max(1, Math.ceil((Date.now() - leaseEndMs) / (24 * 60 * 60 * 1000)));
+          } else {
+            vacantDays = 1;
+          }
+        }
         return {
           ...p,
           usageType,
@@ -145,6 +169,7 @@ export default function PropertiesPage() {
           tenantPhone: tenant?.phone || "",
           displayRent: isSelfUse ? 0 : tenant?.rent ?? p.rent ?? 0,
           payStatus,
+          vacantDays,
         };
       })
       .filter((p) => {
@@ -317,7 +342,11 @@ export default function PropertiesPage() {
                       ) : item.status === "自用" ? (
                         <span className="text-xs text-slate-400">不出租</span>
                       ) : (
-                        <span className="text-xs text-rose-500">待出租</span>
+                        <span className={`text-xs font-medium ${
+                          item.vacantDays < 30 ? "text-green-600 bg-green-50" :
+                          item.vacantDays <= 90 ? "text-orange-600 bg-orange-50" :
+                          "text-red-600 bg-red-50"
+                        } rounded px-1.5 py-0.5`}>空置 {item.vacantDays} 天</span>
                       )}
                     </div>
                     {Array.isArray(item.roomConfigs) && item.roomConfigs.length ? (
