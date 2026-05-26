@@ -172,19 +172,61 @@ export default function VacantRoomsReportPage() {
     : "0.0";
 
   const monthlyRateRows = useMemo(() => {
-    return Array.from({ length: 12 }, (_, i) => {
-      const month = i + 1;
-      const rate = month === new Date().getMonth() + 1 ? Number(vacantRate) : 0;
-      return { month: `${month}月`, rate: `${rate.toFixed(2)}%`, newTenants: 0, checkoutTenants: 0 };
-    })
-      .reverse()
-      .slice(0, 5);
-  }, [vacantRate]);
+    // 使用 records 和 tenants 计算真实的月度空置率
+    const now = new Date();
+    const activeProps = (properties || []).filter(p => String(p.usageType || "") !== "自用（不出租）");
+    const totalActiveRooms = new Set(activeProps.map(p => makeRoomKey(p.building, p.room))).size;
 
-  const yearlyRateRows = useMemo(
-    () => [{ year: `${year}年`, rate: `${vacantRate}%`, newTenants: 0, checkoutTenants: 0 }],
-    [year, vacantRate],
-  );
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const month = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      const monthLabel = `${d.getMonth()+1}月`;
+
+      // 当月有账单记录的房间（入住）
+      const occupiedRooms = new Set();
+      (records || []).forEach(r => {
+        if (String(r.cycle||"").trim() === month) {
+          const p = String(r.room||"").includes(" ") ? String(r.room||"").split(" ")[0] : "";
+          const key = p ? `${p}::${normalizeRoomKey(r.room.split(" ").slice(1).join(" ") || r.room)}` : makeRoomKey("", r.room);
+          occupiedRooms.add(normalizeRoomMatch(r.room));
+        }
+      });
+
+      const occupiedCount = occupiedRooms.size;
+      const rate = totalActiveRooms > 0 ? Math.max(0, ((totalActiveRooms - occupiedCount) / totalActiveRooms) * 100) : 0;
+
+      // 当月新增租客（leaseStart 在本月）
+      const newTenants = (tenants || []).filter(t => {
+        const ls = String(t.leaseStart||"").trim();
+        return ls && ls.startsWith(month);
+      }).length;
+
+      // 当月退租（checkoutDate 在本月）
+      const checkoutTenants = (tenants || []).filter(t => {
+        const cd = String(t.checkoutDate||"").trim();
+        return cd && cd.startsWith(month);
+      }).length;
+
+      return { month: monthLabel, rate: `${rate.toFixed(2)}%`, newTenants, checkoutTenants };
+    }).reverse();
+  }, [properties, records, tenants]);
+
+  const yearlyRateRows = useMemo(() => {
+    const activeProps = (properties || []).filter(p => String(p.usageType || "") !== "自用（不出租）");
+    const totalActiveRooms = new Set(activeProps.map(p => makeRoomKey(p.building, p.room))).size;
+    // 统计全年有记录的唯一房间数作为入住判定
+    const yearStr = String(year);
+    const occupiedRooms = new Set();
+    (records || []).forEach(r => {
+      const cycle = String(r.cycle||"").trim();
+      if (cycle.startsWith(yearStr)) occupiedRooms.add(normalizeRoomMatch(r.room));
+    });
+    const occupiedCount = occupiedRooms.size;
+    const avgRate = totalActiveRooms > 0 ? Math.max(0, ((totalActiveRooms - occupiedCount) / totalActiveRooms) * 100) : 0;
+    const newTenants = (tenants || []).filter(t => String(t.leaseStart||"").trim().startsWith(yearStr)).length;
+    const checkoutTenants = (tenants || []).filter(t => String(t.checkoutDate||"").trim().startsWith(yearStr)).length;
+    return [{ year: `${year}年`, rate: `${avgRate.toFixed(2)}%`, newTenants, checkoutTenants }];
+  }, [year, properties, records, tenants]);
   const auditRows = useMemo(
     () => [
       { name: "筛选范围房间总数", value: totalRooms, formula: "filteredGrouped.rows.length 求和" },
@@ -250,13 +292,6 @@ export default function VacantRoomsReportPage() {
             空置报表
           </button>
           <button
-            className={`rounded-xl px-4 py-2 text-sm ${tab === "rate" ? "bg-[#0077b6] text-white" : "bg-[#f3fcff] text-slate-700"}`}
-            onClick={() => setTab("rate")}
-            type="button"
-          >
-            空置率
-          </button>
-          <button
             className={`rounded-xl px-4 py-2 text-sm ${tab === "utility" ? "bg-[#0077b6] text-white" : "bg-[#f3fcff] text-slate-700"}`}
             onClick={() => setTab("utility")}
             type="button"
@@ -266,156 +301,64 @@ export default function VacantRoomsReportPage() {
         </div>
 
         {tab === "vacant" ? (
-          <div className="mt-4 grid gap-4 xl:grid-cols-[360px_1fr]">
-            <div className="rounded-2xl bg-[#f8fdff] p-4 ring-1 ring-[#d8f1f8]">
-              <div className="text-sm font-semibold text-slate-900">汇总</div>
-              <div className="mt-3 space-y-3">
-                <div className="rounded-xl bg-white p-3 ring-1 ring-[#e6f6fb]">
-                  <div className="text-xs text-slate-500">房间数</div>
-                  <div className="mt-1 text-xl font-semibold">{totalRooms} 间</div>
-                  <div className="text-xs text-slate-500">空置率 {vacantRate}%</div>
-                  <div className="text-xs text-slate-500">平均空置天数 {avgVacantDays} 天</div>
-                </div>
-                {filteredGrouped.map((g) => {
-                  const vacant = g.rows.filter((r) => r.vacant).length;
-                  const rate = g.rows.length ? ((vacant / g.rows.length) * 100).toFixed(2) : "0.00";
-                  return (
-                    <div key={g.building} className="rounded-xl bg-white p-3 ring-1 ring-[#e6f6fb]">
-                      <div className="text-sm font-semibold">{g.building}</div>
-                      <div className="text-xs text-slate-500">{vacant}/{g.rows.length} 间</div>
-                      <div className="text-sm text-slate-700">{rate}%</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl ring-1 ring-[#d8f1f8]">
-              <table className="min-w-full text-sm">
-                <thead className="bg-[#f3fcff] text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 text-left">房产</th>
-                    <th className="px-4 py-3 text-left">房号</th>
-                    <th className="px-4 py-3 text-left">空置天数</th>
-                    <th className="px-4 py-3 text-left">累计空置</th>
-                    <th className="px-4 py-3 text-left">统计天数</th>
-                    <th className="px-4 py-3 text-left">空置时长比</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vacantRows.map((row, idx) => (
-                    <tr key={`${row.building}-${row.room}-${idx}`} className="border-t border-slate-100">
-                      <td className="px-4 py-3">{row.building}</td>
-                      <td className="px-4 py-3">{row.room}</td>
-                      <td className="px-4 py-3">{row.vacantDays}</td>
-                      <td className="px-4 py-3">{row.vacantDays}</td>
-                      <td className="px-4 py-3">{row.vacantDays}</td>
-                      <td className="px-4 py-3">100.00%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : tab === "rate" ? (
           <div className="mt-4 space-y-4">
             <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-[#f8fdff] px-3 py-3 ring-1 ring-[#d8f1f8]">
-              <button className="rounded-lg bg-[#0077b6] px-3 py-2 text-sm text-white" type="button">
-                月
-              </button>
-              <button className="rounded-lg border border-[#ade8f4] px-3 py-2 text-sm text-slate-700" type="button">
-                年
-              </button>
-              <input
-                className="w-28 rounded-lg border border-[#ade8f4] px-3 py-2 text-sm"
-                type="number"
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value || new Date().getFullYear()))}
-              />
-              <select
-                className="rounded-lg border border-[#ade8f4] px-3 py-2 text-sm"
-                value={buildingFilter}
-                onChange={(e) => setBuildingFilter(e.target.value)}
-              >
-                {buildingOptions.map((x) => (
-                  <option key={x}>{x}</option>
-                ))}
+              <select className="rounded-lg border border-[#ade8f4] px-3 py-2 text-sm" value={buildingFilter} onChange={(e) => setBuildingFilter(e.target.value)}>
+                {buildingOptions.map((x) => (<option key={x}>{x}</option>))}
               </select>
+              <input className="w-28 rounded-lg border border-[#ade8f4] px-3 py-2 text-sm" type="number" value={year} onChange={(e) => setYear(Number(e.target.value || new Date().getFullYear()))} />
             </div>
-
-            <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+            <div className="grid gap-4 xl:grid-cols-3">
               <div className="rounded-2xl bg-white p-4 ring-1 ring-[#d8f1f8]">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                  <Home className="h-4 w-4 text-[#0077b6]" />
-                  空置率趋势（当前筛选）
-                </div>
+                <div className="mb-1 text-xs text-slate-500">空置率</div>
                 <div className="text-3xl font-semibold text-slate-900">{vacantRate}%</div>
-                <div className="mt-2 text-xs text-slate-500">
-                  口径：空置房间 / 房间总数，当前筛选房间 {totalRooms} 间，空置 {totalVacant} 间。
-                </div>
+                <div className="mt-1 text-xs text-slate-400">{totalRooms} 间房，空置 {totalVacant} 间</div>
               </div>
-
               <div className="rounded-2xl bg-white p-4 ring-1 ring-[#d8f1f8]">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                  <Table2 className="h-4 w-4 text-[#0077b6]" />
-                  指标说明
-                </div>
-                <ul className="space-y-2 text-sm text-slate-600">
-                  <li>1. 空置天数：按最近退租/租约结束时间推算至今（最少 1 天）。</li>
-                  <li>2. 累计空置、统计天数、空置时长比：当前先做同值占位，下一步按你业务规则细化。</li>
-                </ul>
+                <div className="mb-1 text-xs text-slate-500">平均空置天数</div>
+                <div className="text-3xl font-semibold text-slate-900">{avgVacantDays} 天</div>
+                <div className="mt-1 text-xs text-slate-400">空置房间均值</div>
+              </div>
+              <div className="rounded-2xl bg-white p-4 ring-1 ring-[#d8f1f8]">
+                <div className="mb-1 text-xs text-slate-500">{year}年</div>
+                <div className="text-3xl font-semibold text-slate-900">{yearlyRateRows[0]?.rate || vacantRate + "%"}</div>
+                <div className="mt-1 text-xs text-slate-400">新增 {yearlyRateRows[0]?.newTenants || 0} / 退租 {yearlyRateRows[0]?.checkoutTenants || 0}</div>
               </div>
             </div>
-
+            <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+              <div className="rounded-2xl bg-[#f8fdff] p-4 ring-1 ring-[#d8f1f8]">
+                <div className="text-sm font-semibold text-slate-900">各楼栋</div>
+                <div className="mt-3 space-y-3">
+                  {filteredGrouped.map((g) => { const vacant = g.rows.filter((r) => r.vacant).length; const rate = g.rows.length ? ((vacant / g.rows.length) * 100).toFixed(2) : "0.00"; return (<div key={g.building} className="rounded-xl bg-white p-3 ring-1 ring-[#e6f6fb]"><div className="text-sm font-semibold">{g.building}</div><div className="text-xs text-slate-500">{vacant}/{g.rows.length} 间</div><div className="text-sm text-slate-700">{rate}%</div></div>); })}
+                </div>
+              </div>
+              <div className="overflow-hidden rounded-2xl ring-1 ring-[#d8f1f8]">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-[#f3fcff] text-slate-600"><tr><th className="px-4 py-3 text-left">房产</th><th className="px-4 py-3 text-left">房号</th><th className="px-4 py-3 text-left">空置天数</th></tr></thead>
+                  <tbody>
+                    {vacantRows.map((row, idx) => (<tr key={`${row.building}-${row.room}-${idx}`} className="border-t border-slate-100"><td className="px-4 py-3">{row.building}</td><td className="px-4 py-3">{row.room}</td><td className="px-4 py-3">{row.vacantDays}</td></tr>))}
+                    {vacantRows.length === 0 && (<tr><td colSpan={3} className="px-4 py-8 text-center text-slate-400">无空置房间</td></tr>)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 mt-2"><Table2 className="h-4 w-4 text-[#0077b6]" />空置率趋势</div>
             <div className="overflow-hidden rounded-2xl ring-1 ring-[#d8f1f8]">
               <table className="min-w-full text-sm">
-                <thead className="bg-[#f3fcff] text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 text-left">月份</th>
-                    <th className="px-4 py-3 text-left">空置率</th>
-                    <th className="px-4 py-3 text-left">新增租客数</th>
-                    <th className="px-4 py-3 text-left">退租数</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {monthlyRateRows.map((row) => (
-                    <tr key={row.month} className="border-t border-slate-100">
-                      <td className="px-4 py-3">{row.month}</td>
-                      <td className="px-4 py-3">{row.rate}</td>
-                      <td className="px-4 py-3">{row.newTenants}</td>
-                      <td className="px-4 py-3">{row.checkoutTenants}</td>
-                    </tr>
-                  ))}
-                </tbody>
+                <thead className="bg-[#f3fcff] text-slate-600"><tr><th className="px-4 py-3 text-left">月份</th><th className="px-4 py-3 text-left">空置率</th><th className="px-4 py-3 text-left">新增租客数</th><th className="px-4 py-3 text-left">退租数</th></tr></thead>
+                <tbody>{monthlyRateRows.map((row) => (<tr key={row.month} className="border-t border-slate-100"><td className="px-4 py-3">{row.month}</td><td className="px-4 py-3">{row.rate}</td><td className="px-4 py-3">{row.newTenants}</td><td className="px-4 py-3">{row.checkoutTenants}</td></tr>))}</tbody>
               </table>
             </div>
-
             <div className="overflow-hidden rounded-2xl ring-1 ring-[#d8f1f8]">
               <table className="min-w-full text-sm">
-                <thead className="bg-[#f3fcff] text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 text-left">年份</th>
-                    <th className="px-4 py-3 text-left">空置率</th>
-                    <th className="px-4 py-3 text-left">新增租客数</th>
-                    <th className="px-4 py-3 text-left">退租数</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {yearlyRateRows.map((row) => (
-                    <tr key={row.year} className="border-t border-slate-100">
-                      <td className="px-4 py-3">{row.year}</td>
-                      <td className="px-4 py-3">{row.rate}</td>
-                      <td className="px-4 py-3">{row.newTenants}</td>
-                      <td className="px-4 py-3">{row.checkoutTenants}</td>
-                    </tr>
-                  ))}
-                </tbody>
+                <thead className="bg-[#f3fcff] text-slate-600"><tr><th className="px-4 py-3 text-left">年份</th><th className="px-4 py-3 text-left">空置率</th><th className="px-4 py-3 text-left">新增租客数</th><th className="px-4 py-3 text-left">退租数</th></tr></thead>
+                <tbody>{yearlyRateRows.map((row) => (<tr key={row.year} className="border-t border-slate-100"><td className="px-4 py-3">{row.year}</td><td className="px-4 py-3">{row.rate}</td><td className="px-4 py-3">{row.newTenants}</td><td className="px-4 py-3">{row.checkoutTenants}</td></tr>))}</tbody>
               </table>
             </div>
           </div>
         ) : null}
 
-        {tab === "utility" ? (() => {
+{tab === "utility" ? (() => {
           // 水电对账计算
           const buildGroups = (cycle) => {
             const [y, m] = (cycle || "").split("-").map(Number);
