@@ -876,25 +876,27 @@ const RentRecordsPage = () => {
       container.removeChild(card);
       document.body.removeChild(container);
       setSingleCard({ id: item.id, tenant: item.tenant, room: item.room, dataUrl, text });
+      // Auto mark as sent
+      if (item.sentStatus !== "sent") {
+        try {
+          if (apiEnabled) await markBillSent(item.id, { status: "sent", targetGroup: item.tenant || "" });
+        } catch (_) { /* ignore */ }
+        const sentAt = new Date().toISOString();
+        setRecords((prev) => prev.map((x) => (x.id === item.id ? { ...x, sentStatus: "sent", sentAt } : x)));
+      }
       setError("文字已复制到剪贴板，图片已生成");
     } catch (e) {
       setError(e.message || "生成失败");
     }
   }
 
-  async function markSent(item) {
+  async function toggleSent(item) {
+    const newStatus = item.sentStatus === "sent" ? null : "sent";
     try {
-      const payload = {
-        status: "sent",
-        targetGroup: item.groupName || item.remark || item.tenant || "",
-      };
-      if (apiEnabled) await markBillSent(item.id, payload);
-      const sentAt = new Date().toISOString();
-      setRecords((prev) => prev.map((x) => (x.id === item.id ? { ...x, sentStatus: "sent", sentAt } : x)));
-      setError("已标记为已发送");
-    } catch (e) {
-      setError(e.message || "标记发送失败");
-    }
+      if (apiEnabled) await markBillSent(item.id, { status: newStatus || "unsent", targetGroup: item.tenant || "" });
+    } catch (_) { /* ignore */ }
+    const sentAt = newStatus ? new Date().toISOString() : null;
+    setRecords((prev) => prev.map((x) => (x.id === item.id ? { ...x, sentStatus: newStatus, sentAt } : x)));
   }
 
   return (
@@ -996,14 +998,11 @@ const RentRecordsPage = () => {
                   <td className="px-2 py-2"><button className={`rounded px-2 py-1 text-xs cursor-pointer ${getStatusTone(item.status || "未收")}`} type="button" onClick={() => openQuickPay(item)} title="点击收款">{item.status || "未收"}</button></td>
                   <td className="px-2 py-2 whitespace-nowrap">{formatDate((Array.isArray(item.payments)&&item.payments.length>0) ? item.payments[item.payments.length-1].paidAt : (item.paidAt && item.paidAt !== "-" ? item.paidAt : "")) || "-"}</td>
                   <td className="px-2 py-2">
-                    <span className={`rounded px-2 py-1 text-xs ${item.sentStatus === "sent" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                      {item.sentStatus === "sent" ? "已发" : "待发"}
-                    </span>
+                    <button className={`rounded px-2 py-1 text-xs cursor-pointer ${item.sentStatus === "sent" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`} type="button" onClick={() => toggleSent(item)} title="点击切换发送状态">{item.sentStatus === "sent" ? "已发" : "待发"}</button>
                   </td>
                   <td className="px-2 py-2">
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5">
                       <button className="rounded-lg border border-slate-300 px-2.5 py-1 text-slate-700" type="button" onClick={() => copyBillMessage(item)}>复制账单</button>
-                      <button className="rounded-lg border border-emerald-300 px-2.5 py-1 text-emerald-700" type="button" onClick={() => markSent(item)}>标记已发</button>
                       <button className="rounded-lg border border-slate-300 px-2.5 py-1" type="button" onClick={() => printBill(item)}>打印</button>
                       <button className="rounded border border-sky-200 px-2 py-1" type="button" onClick={() => openEdit(item)}>编辑</button>
                       <button className="rounded-lg border border-rose-300 px-2.5 py-1 text-rose-700" type="button" onClick={() => removeRecord(item)}>删除</button>
@@ -1118,7 +1117,7 @@ const RentRecordsPage = () => {
             </div>
             <img src={singleCard.dataUrl} alt={singleCard.tenant} className="w-full rounded-xl" />
             <pre className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-700 whitespace-pre-wrap">{singleCard.text}</pre>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex gap-1.5">
               <button className="flex-1 rounded-xl bg-slate-600 py-2 text-sm text-white font-medium" type="button" onClick={() => { navigator.clipboard.writeText(singleCard.text); }}>📋 复制文字</button>
               <a className="flex-1 rounded-xl bg-blue-600 py-2 text-center text-sm text-white font-medium no-underline" href={singleCard.dataUrl} download={`账单_${singleCard.tenant}_${singleCard.room}.png`}>💾 保存图片</a>
             </div>
@@ -1138,7 +1137,7 @@ const RentRecordsPage = () => {
                 <div className="mb-2 text-sm font-medium text-slate-700">{i+1}. {img.room} · {img.tenant}</div>
                 <img src={img.dataUrl} alt={img.tenant} className="w-full rounded-xl" />
                 <pre className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-700 whitespace-pre-wrap">{img.text}</pre>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex gap-1.5">
                   <button className="flex-1 rounded-xl bg-slate-600 py-2 text-center text-sm text-white font-medium" type="button" onClick={() => { navigator.clipboard.writeText(img.text); }}>📋 复制文字</button>
                   <a className="flex-1 rounded-xl bg-blue-600 py-2 text-center text-sm text-white font-medium no-underline" href={img.dataUrl} download={`账单_${img.tenant}_${img.room}.png`}>💾 保存图片</a>
                 </div>
