@@ -1044,7 +1044,7 @@ const RentRecordsPage = () => {
                 )}
               </label>
               <label className="text-sm">租客姓名<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.tenant} readOnly /></label>
-              <label className="text-sm">周期<input type="month" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.cycle} onChange={(e) => setForm((p) => ({ ...p, cycle: e.target.value }))} /></label>
+              <label className="text-sm">周期<input type="month" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.cycle} onChange={(e) => setForm((p) => ({ ...p, cycle: e.target.value, dueDate: e.target.value ? `${e.target.value}-10` : p.dueDate }))} /></label>
               <label className="text-sm">租金<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.rentPart} onChange={(e) => setForm((p) => recalcReceivable({ ...p, rentPart: e.target.value }))} /></label>
               <label className="text-sm">应收<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.receivable} readOnly /></label>
               <label className="text-sm">已收<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.received} onChange={(e) => setForm((p) => ({ ...p, received: e.target.value }))} /></label>

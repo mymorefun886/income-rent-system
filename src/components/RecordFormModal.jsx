@@ -5,8 +5,12 @@ export default function RecordFormModal({
   form, setForm, editing, roomOptions, onSave, onClose,
   onApplyRoom, onApplyMeterAuto, onApplyOtherFee, onRecalcReceivable,
 }) {
-  const handleChange = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const handleChange = (key, value, isCycle) => {
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (isCycle && value) next.dueDate = `${value}-10`;
+      return next;
+    });
   };
 
   const handleMeterChange = (key, value) => {
@@ -45,7 +49,7 @@ export default function RecordFormModal({
             )}
           </label>
           <label className="text-sm">租客姓名<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.tenant} readOnly /></label>
-          <label className="text-sm">周期<input type="month" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.cycle} onChange={(e) => handleChange("cycle", e.target.value)} /></label>
+          <label className="text-sm">周期<input type="month" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.cycle} onChange={(e) => handleChange("cycle", e.target.value, true)} /></label>
           <label className="text-sm">租金<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.rentPart} onChange={(e) => onRecalcReceivable({ ...form, rentPart: e.target.value }, setForm)} /></label>
           <label className="text-sm">应收<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.receivable} readOnly /></label>
           <label className="text-sm">已收<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.received} onChange={(e) => handleChange("received", e.target.value)} /></label>
