@@ -176,6 +176,8 @@ export default function MeterInputPage() {
       else if (!rm) { rm = rt; }
       if (!bld && rm.includes(" ")) { const ls=rm.lastIndexOf(" "); bld=rm.slice(0,ls).trim(); rm=rm.slice(ls+1).trim(); }
       if (bld && rm.includes(" ") && rm.indexOf(bld)===0) { rm=rm.slice(bld.length).trim(); }
+      // 修复: 如果 rm 仍包含空格（roomNo 被误写为完整地址），只取末段房号
+      if (rm && rm.includes(" ")) { const parts=rm.trim().split(/\s+/); rm=parts[parts.length-1]; }
       const key = makeRoomKey(bld, rm);
       const p = lastMap.get(key);
       if (!p || String(r.cycle||"") > String(p.cycle||"")) lastMap.set(key, { e: r.electricNow||"", w: r.waterNow||"" });
