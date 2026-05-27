@@ -3718,8 +3718,13 @@ async function handler(request, response) {
         const feeItems = Array.isArray(tenant.feeItems) ? tenant.feeItems : [];
         const electricItem = feeItems.find((x) => /电|electric/i.test(String(x.name || "")));
         const waterItem = feeItems.find((x) => /水|water/i.test(String(x.name || "")));
-        const electricPrev = Number(electricItem?.initialReading || 0);
-        const waterPrev = Number(waterItem?.initialReading || 0);
+        // Use last record's readings as previous, fall back to tenant's initialReading
+        const roomKey = makeTenantRoomKey(building, room);
+        const lastRecord = db.records
+          .filter((r) => r.roomKey === roomKey && String(r.cycle || "") < cycle)
+          .sort((a, b) => String(b.cycle || "").localeCompare(String(a.cycle || "")))[0] || null;
+        const electricPrev = Number(lastRecord?.electricNow || electricItem?.initialReading || 0);
+        const waterPrev = Number(lastRecord?.waterNow || waterItem?.initialReading || 0);
         const electricNow = Number(reading.electricNow || 0);
         const waterNow = Number(reading.waterNow || 0);
         const electricUsage = Math.max(0, electricNow - electricPrev);
