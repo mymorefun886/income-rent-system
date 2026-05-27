@@ -268,6 +268,15 @@ export const generateBillsFromReadings = (p: Payload) =>
 export const fetchWechatMessages = (cycle: string) =>
   get(`/api/wechat/messages?cycle=${encodeURIComponent(cycle)}`);
 
+// ---- Meter Drafts (方案一/四: 自动存抄表草稿) ----
+
+export const fetchMeterDrafts = (cycle: string) =>
+  get<Array<Record<string, unknown>>>(`/api/meter-drafts?cycle=${encodeURIComponent(cycle)}`);
+export const saveMeterDraft = (p: Payload) =>
+  put("/api/meter-drafts", p);
+export const deleteMeterDraft = (id: string) =>
+  del(`/api/meter-drafts/${id}`);
+
 // ---- Upload -----------------------------------------------------------------
 
 export async function uploadFile(file: File) {

@@ -33,6 +33,7 @@ const dbSchema = z.object({
   runtimeLogs: z.array(z.record(z.unknown())).default([]),
   profitAlerts: z.array(z.record(z.unknown())).default([]),
   settings: z.record(z.unknown()).default({}),
+  meterDrafts: z.array(z.record(z.unknown())).default([]),
 }).passthrough();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -3681,6 +3682,69 @@ async function handler(request, response) {
     }
   }
 
+  // == Meter Drafts (方案一/四: 自动存抄表草稿到后端) ==
+  if (request.method === "GET" && pathname === "/api/meter-drafts") {
+    const queryCycle = String(url.searchParams.get("cycle") || "").trim();
+    if (!queryCycle) return sendJson(response, 400, { success: false, message: "缺少 cycle 参数" });
+    const drafts = (db.meterDrafts || []).filter((d) => String(d.cycle || "") === queryCycle);
+    return sendJson(response, 200, ok(drafts));
+  }
+
+  if (request.method === "PUT" && pathname === "/api/meter-drafts") {
+    try {
+      const body = await parseBody(request);
+      const building = String(body.building || "").trim();
+      const room = String(body.room || "").trim();
+      const draftCycle = String(body.cycle || "").trim();
+      if (!building || !room || !draftCycle) {
+        return sendJson(response, 400, { success: false, message: "缺少 building/room/cycle" });
+      }
+      const drafts = db.meterDrafts || [];
+      const key = building + "::" + room + "::" + draftCycle;
+      const idx = drafts.findIndex(
+        (d) => String(d.building || "") === building && String(d.room || "") === room && String(d.cycle || "") === draftCycle,
+      );
+      const entry = {
+        id: idx >= 0 ? drafts[idx].id : `md-${randomUUID()}`,
+        building,
+        room,
+        cycle: draftCycle,
+        electricNow: String(body.electricNow ?? ""),
+        waterNow: String(body.waterNow ?? ""),
+        createdAt: idx >= 0 ? drafts[idx].createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (idx >= 0) { drafts[idx] = entry; } else { drafts.push(entry); }
+      db.meterDrafts = drafts;
+      writeDb(db);
+      return sendJson(response, 200, ok(entry));
+    } catch (e) {
+      return sendJson(response, 400, { success: false, message: `保存抄表草稿失败: ${String(e?.message || e || "")}` });
+    }
+  }
+
+  if (request.method === "DELETE" && pathname.startsWith("/api/meter-drafts/")) {
+    const draftId = pathname.replace("/api/meter-drafts/", "");
+    const drafts = db.meterDrafts || [];
+    const idx = drafts.findIndex((d) => d.id === draftId);
+    if (idx < 0) return sendJson(response, 404, { success: false, message: "未找到该抄表草稿" });
+    drafts.splice(idx, 1);
+    db.meterDrafts = drafts;
+    writeDb(db);
+    return sendJson(response, 200, ok({ deleted: true }));
+  }
+
+  // 方案三: destructive 操作前自动备份
+  function autoBackupBeforeDestructive(action) {
+    const backupDir = process.env.BACKUP_DIR || path.join(storageDir, "backups");
+    mkdirSync(backupDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const target = path.join(backupDir, `db.auto-before-${action}.${stamp}.json`);
+    writeFileSync(target, readFileSync(dbPath, "utf8"));
+    addAuditLog(db, `backup.auto_before_${action}`, { target }, db.user?.username || "admin");
+  }
+
+  autoBackupBeforeDestructive("generate-bills");
 
   if (request.method === "POST" && pathname === "/api/bills/generate-from-readings") {
     try {
@@ -4224,6 +4288,7 @@ if (isMain) {
     writeRuntimeLog("info", "server.started", { host, port });
     runAutomationSchedulerTick();
     setInterval(runAutomationSchedulerTick, 5 * 60 * 1000);
+    setInterval(() => { try { makeDataBackup("auto-backup"); } catch (_) {} }, 15 * 60 * 1000);
     console.log(`income-local-api listening on http://${host}:${port}`);
   });
 }

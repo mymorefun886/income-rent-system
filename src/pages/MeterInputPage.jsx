@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Printer, RefreshCw, Send, Upload } from "lucide-react";
-import { apiEnabled, createRecord, fetchProperties, fetchRecords, fetchTenants, updateRecord } from "../lib/api";
+import { apiEnabled, createRecord, fetchMeterDrafts, fetchProperties, fetchRecords, fetchTenants, saveMeterDraft, updateRecord } from "../lib/api";
 import ConfirmDialog from "../components/ConfirmDialog";
 
 function makeRoomKey(b, r) { return (b||"").trim()+"::"+(r||"").replace(/\s+/g,"").toUpperCase(); }
@@ -12,12 +12,72 @@ export default function MeterInputPage() {
   const [cycle, setCycle] = useState(new Date().toISOString().slice(0,7));
   const STORAGE_KEY = "meter_input_" + new Date().toISOString().slice(0,7);
   const [readings, setReadings] = useState(() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}"); } catch { return {}; } });
-  const [savedCount, setSavedCount] = useState(Object.keys(readings).length);
+  const [savedCount, setSavedCount] = useState(() => { try { const r=JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}"); return Object.keys(r).filter(k=>r[k]?.e||r[k]?.w).length; } catch { return 0; } });
   const [loading, setLoading] = useState(apiEnabled);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [csvPasteText, setCsvPasteText] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [afkTimer, setAfkTimer] = useState(null);
+
+  // 方案二: 离开页面提醒
+  useEffect(() => {
+    const hasUnsynced = Object.values(readings).some(v => v.e || v.w);
+    if (hasUnsynced) {
+      const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
+      window.addEventListener("beforeunload", handler);
+      return () => window.removeEventListener("beforeunload", handler);
+    }
+  }, [readings]);
+
+  // 方案一/四: 自动防抖保存到后端
+  const autoSaveTimerRef = useRef(null);
+  useEffect(() => {
+    if (!apiEnabled) return;
+    if (afkTimer) clearTimeout(afkTimer);
+    const t = setTimeout(() => {
+      const entries = Object.entries(readings).filter(([,v]) => v.e || v.w);
+      if (!entries.length) return;
+      for (const [rid, vals] of entries) {
+        const [bld, room] = rid.split("::");
+        saveMeterDraft({ building: bld, room, cycle, electricNow: vals.e, waterNow: vals.w }).catch(() => {});
+      }
+    }, 1500); // 防抖 1.5s
+    setAfkTimer(t);
+    return () => { if (t) clearTimeout(t); };
+  }, [readings, cycle, apiEnabled]);
+
+  // 方案一: 加载远端草稿 + 合并本地
+  useEffect(() => {
+    if (!apiEnabled || !cycle) return;
+    fetchMeterDrafts(cycle).then((drafts) => {
+      if (!Array.isArray(drafts) || drafts.length === 0) return;
+      setReadings((prev) => {
+        const merged = { ...prev };
+        let changed = false;
+        for (const d of drafts) {
+          const rid = makeRoomKey(d.building, d.room);
+          const existing = merged[rid];
+          if (d.electricNow || d.waterNow) {
+            if (!existing || (!existing.e && !existing.w)) {
+              merged[rid] = { e: d.electricNow || "", w: d.waterNow || "" };
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          // no saveLocal since server is already source of truth
+          setSavedCount(Object.keys(merged).filter(k => merged[k]?.e || merged[k]?.w).length);
+        }
+        return merged;
+      });
+    }).catch(() => {});
+  }, [cycle, apiEnabled]);
+
+  function saveLocal(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    setSavedCount(Object.keys(data).filter(k => data[k]?.e || data[k]?.w).length);
+  }
 
   function handleSyncClick() {
     const existingCount = records.filter(r => String(r.cycle || "").trim() === cycle).length;
@@ -40,6 +100,15 @@ export default function MeterInputPage() {
     }
     setReadings(next);
     saveLocal(next);
+    // 方案一: CSV导入也自动存后端
+    if (apiEnabled) {
+      for (const row of rows) {
+        const rid = makeRoomKey(row.building, row.room);
+        if (rooms.find(r => makeRoomKey(r.b, r.r) === rid)) {
+          saveMeterDraft({ building: row.building, room: row.room, cycle, electricNow: row.electricNow || "", waterNow: row.waterNow || "" }).catch(() => {});
+        }
+      }
+    }
     setMsg(`CSV 导入完成：匹配 ${count} 间`);
   }
 
@@ -77,11 +146,6 @@ export default function MeterInputPage() {
     if (!rows.length) { setMsg("CSV 格式不正确或无有效数据"); return; }
     applyCsvRows(rows);
     setCsvPasteText("");
-  }
-
-  function saveLocal(data) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    setSavedCount(Object.keys(data).filter(k => data[k]?.e || data[k]?.w).length);
   }
 
   async function load() {
@@ -194,6 +258,15 @@ export default function MeterInputPage() {
         if (existing) { await updateRecord(existing.id, { ...existing, ...payload, id: existing.id }); updated++; }
         else if (tenant) { await createRecord(payload); created++; }
       }
+      // 同步成功后清理远端草稿
+      if (apiEnabled) {
+        try {
+          const drafts = await fetchMeterDrafts(cycle);
+          if (Array.isArray(drafts)) {
+            await Promise.all(drafts.map(d => fetch(`/api/meter-drafts/${d.id}`, { method: "DELETE" }).catch(() => {})));
+          }
+        } catch (_) {}
+      }
       setMsg(`同步完成：更新 ${updated} 条，新建 ${created} 条（自用/空置房跳过）`);
       localStorage.removeItem(STORAGE_KEY);
       setReadings({});
@@ -206,7 +279,7 @@ export default function MeterInputPage() {
   function downloadMeterHtml() {
     const roomsForOffline = rooms.map(r => ({ b: r.b, r: r.r, ep: r.ep, wp: r.wp }));
     const dataJson = JSON.stringify(roomsForOffline);
-    const html = '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>抄表录入</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font:14px "Microsoft YaHei",sans-serif;background:#f0f4f8;color:#1e293b;padding:8px;max-width:480px;margin:0 auto}.h{background:#2563eb;color:#fff;padding:12px 16px;border-radius:12px;margin-bottom:10px}.h h1{font-size:18px}.h div{font-size:12px;opacity:.8;margin-top:2px}.bld{background:#dbeafe;padding:8px 12px;border-radius:8px;font-weight:bold;font-size:13px;margin:8px 0 4px;display:flex;justify-content:space-between}.row{background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:4px;display:flex;align-items:center;gap:8px}.room{font-weight:bold;font-size:16px;min-width:36px}.inp{flex:1;display:flex;flex-direction:column}.inp label{font-size:10px;color:#64748b}.inp input{width:100%;border:1px solid #cbd5e1;border-radius:6px;padding:8px 6px;font-size:15px;text-align:center}.inp input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px #bfdbfe}.prev{font-size:10px;color:#94a3b8;text-align:right;min-width:28px}.btns{position:sticky;bottom:8px;background:#fff;border-radius:12px;padding:12px;margin-top:12px;box-shadow:0 -2px 12px rgba(0,0,0,.08);display:flex;gap:8px}.btns button{flex:1;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer}.btn-save{background:#2563eb;color:#fff}.btn-export{background:#10b981;color:#fff}.btn-clear{background:#f1f5f9;color:#64748b}.toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:99;opacity:0;transition:opacity .3s}.toast.show{opacity:1}</style></head><body><div class="h"><h1>抄表录入</h1><div>离线可用 · 数据存手机 · 回家导出 CSV</div></div><div id="app"></div><div class="btns"><button class="btn-clear" onclick="clearAll()">清空</button><button class="btn-save" onclick="saveData()">暂存</button><button class="btn-export" onclick="exportData()">导出 CSV</button></div><div class="toast" id="toast"></div><script>var ROOMS=' + dataJson + ';var CYCLE=new Date().toISOString().slice(0,7);var STORAGE_KEY="meter_"+CYCLE;function showToast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},1500)}function loadData(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}}catch(e){return{}}}function saveData(){var d={};document.querySelectorAll(".row").forEach(function(r){var rid=r.dataset.rid;var e=r.querySelector(".e").value;var w=r.querySelector(".w").value;if(e||w)d[rid]=[e,w]});localStorage.setItem(STORAGE_KEY,JSON.stringify(d));showToast("已暂存 "+Object.keys(d).length+" 条")}function exportData(){saveData();var d=loadData();var lines=["building,room,electricNow,waterNow"];ROOMS.forEach(function(r){var v=d[r.b+"::"+r.r]||["",""];if(v[0]||v[1])lines.push(r.b+","+r.r+","+v[0]+","+v[1])});var csv="\\uFEFF"+lines.join("\\n");var blob=new Blob([csv],{type:"text/csv"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="meter_"+CYCLE+".csv";a.click();showToast("已导出 "+(lines.length-1)+" 条到 CSV")}function clearAll(){if(confirm("确定清空？")){localStorage.removeItem(STORAGE_KEY);render();showToast("已清空")}}function render(){var d=loadData();var groups={};ROOMS.forEach(function(r){var b=r.b||"其他";if(!groups[b])groups[b]=[];groups[b].push(r)});var h="";Object.keys(groups).forEach(function(b){var rs=groups[b];h+=\'<div class="bld">\'+b+\' <span>\'+rs.length+\'间</span></div>\';rs.forEach(function(r){var v=d[r.b+"::"+r.r]||["",""];h+=\'<div class="row" data-rid="\'+r.b+\'::\'+r.r+\'">\';h+=\'<div class="room">\'+r.r+\'</div>\';h+=\'<div class="inp"><label>电(度)</label><input class="e" type="number" step="1" inputmode="numeric" value="\'+v[0]+\'"></div>\';h+=\'<div class="prev">\'+(r.ep?"上"+r.ep:"")+\'</div>\';h+=\'<div class="inp"><label>水(方)</label><input class="w" type="number" step="0.1" inputmode="decimal" value="\'+v[1]+\'"></div>\';h+=\'<div class="prev">\'+(r.wp?"上"+r.wp:"")+\'</div>\';h+=\'</div>\'})});document.getElementById("app").innerHTML=h}render();</script></body></html>';
+    const html = '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>抄表录入</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font:14px "Microsoft YaHei",sans-serif;background:#f0f4f8;color:#1e293b;padding:8px;max-width:480px;margin:0 auto}.h{background:#2563eb;color:#fff;padding:12px 16px;border-radius:12px;margin-bottom:10px}.h h1{font-size:18px}.h div{font-size:12px;opacity:.8;margin-top:2px}.bld{background:#dbeafe;padding:8px 12px;border-radius:8px;font-weight:bold;font-size:13px;margin:8px 0 4px;display:flex;justify-content:space-between}.row{background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:4px;display:flex;align-items:center;gap:8px}.room{font-weight:bold;font-size:16px;min-width:36px}.inp{flex:1;display:flex;flex-direction:column}.inp label{font-size:10px;color:#64748b}.inp input{width:100%;border:1px solid #cbd5e1;border-radius:6px;padding:8px 6px;font-size:15px;text-align:center}.inp input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px #bfdbfe}.prev{font-size:10px;color:#94a3b8;text-align:right;min-width:28px}.btns{position:sticky;bottom:8px;background:#fff;border-radius:12px;padding:12px;margin-top:12px;box-shadow:0 -2px 12px rgba(0,0,0,.08);display:flex;gap:8px}.btns button{flex:1;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer}.btn-save{background:#2563eb;color:#fff}.btn-export{background:#10b981;color:#fff}.btn-clear{background:#f1f5f9;color:#64748b}.toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:99;opacity:0;transition:opacity .3s}.toast.show{opacity:1}</style></head><body><div class="h"><h1>抄表录入</h1><div>离线可用 · 数据存手机 · 回家导出 CSV</div></div><div id="app"></div><div class="btns"><button class="btn-clear" onclick="clearAll()">清空</button><button class="btn-save" onclick="saveData()">暂存</button><button class="btn-export" onclick="exportData()">导出 CSV</button></div><div class="toast" id="toast"></div><script>var ROOMS=' + dataJson + ';var CYCLE=new Date().toISOString().slice(0,7);var STORAGE_KEY="meter_"+CYCLE;function showToast(m){var t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(function(){t.classList.remove("show")},1500)}function loadData(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{}}catch(e){return{}}}function saveData(){var d={};document.querySelectorAll(".row").forEach(function(r){var rid=r.dataset.rid;var e=r.querySelector(".e").value;var w=r.querySelector(".w").value;if(e||w)d[rid]=[e,w]});localStorage.setItem(STORAGE_KEY,JSON.stringify(d));showToast("已暂存 "+Object.keys(d).length+" 条")}function exportData(){saveData();var d=loadData();var lines=["building,room,electricNow,waterNow"];ROOMS.forEach(function(r){var v=d[r.b+"::"+r.r]||["",""];if(v[0]||v[1])lines.push(r.b+","+r.r+","+v[0]+","+v[1])});var csv="﻿"+lines.join("\n");var blob=new Blob([csv],{type:"text/csv"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="meter_"+CYCLE+".csv";a.click();showToast("已导出 "+(lines.length-1)+" 条到 CSV")}function clearAll(){if(confirm("确定清空？")){localStorage.removeItem(STORAGE_KEY);render();showToast("已清空")}}function render(){var d=loadData();var groups={};ROOMS.forEach(function(r){var b=r.b||"其他";if(!groups[b])groups[b]=[];groups[b].push(r)});var h="";Object.keys(groups).forEach(function(b){var rs=groups[b];h+=\'<div class="bld">\'+b+\' <span>\'+rs.length+\'间</span></div>\';rs.forEach(function(r){var v=d[r.b+"::"+r.r]||["",""];h+=\'<div class="row" data-rid="\'+r.b+\'::\'+r.r+\'">\';h+=\'<div class="room">\'+r.r+\'</div>\';h+=\'<div class="inp"><label>电(度)</label><input class="e" type="number" step="1" inputmode="numeric" value="\'+v[0]+\'"></div>\';h+=\'<div class="prev">\'+(r.ep?"上"+r.ep:"")+\'</div>\';h+=\'<div class="inp"><label>水(方)</label><input class="w" type="number" step="0.1" inputmode="decimal" value="\'+v[1]+\'"></div>\';h+=\'<div class="prev">\'+(r.wp?"上"+r.wp:"")+\'</div>\';h+=\'</div>\'})});document.getElementById("app").innerHTML=h}render();</script></body></html>';
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -270,7 +343,7 @@ export default function MeterInputPage() {
     <div className="max-w-lg mx-auto p-3 space-y-3">
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-4 text-white">
         <h1 className="text-lg font-bold">📱 手机抄表</h1>
-        <p className="text-xs opacity-80 mt-1">{savedCount > 0 ? `已暂存 ${savedCount} 间 · ` : ""}需联网 · 同步到云端</p>
+        <p className="text-xs opacity-80 mt-1">{savedCount > 0 ? `已暂存 ${savedCount} 间 · ` : ""}填数自动存云端 · 不怕丢</p>
         <div className="mt-2 flex items-center gap-2">
           <input className="rounded-lg px-3 py-1.5 text-sm text-slate-900" type="month" value={cycle} onChange={e => setCycle(e.target.value)} />
           <button className="rounded-lg bg-white/20 px-3 py-1.5 text-xs" onClick={load}><RefreshCw className="inline h-3 w-3 mr-1" />刷新</button>
