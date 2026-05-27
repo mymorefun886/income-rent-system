@@ -335,7 +335,7 @@ const RentRecordsPage = () => {
       status: item.status || "未收",
       method: item.method || "微信",
       paidAt: (item.paidAt && item.paidAt !== "-") ? item.paidAt : "",
-      dueDate: item.dueDate || `${new Date().toISOString().slice(0, 7)}-10`,
+      dueDate: `${item.cycle || new Date().toISOString().slice(0, 7)}-10`,
       note: item.note || "",
       electricPrev: String(item.electricPrev ?? ""),
       electricNow: String(item.electricNow ?? ""),
