@@ -144,6 +144,20 @@ const RentRecordsPage = () => {
     });
   }, [records]);
 
+  // 过滤：自用房、空置无记录的房间隐藏
+  const visibleRecords = useMemo(() => {
+    const usageMap = new Map((properties||[]).map(p => [makeRoomKey(p.building,p.room), String(p.usageType||"")]));
+    return sortedRecords.filter(r => {
+      // 自用房 → 隐藏
+      const p = parseRoomText(r.room||"");
+      if (usageMap.get(makeRoomKey(p.building,p.room)) === "自用（不出租）") return false;
+      // 空置/无租客 且 无任何租金水电 → 隐藏
+      const noTenant = !r.tenant || r.tenant === "-" || String(r.tenant||"").startsWith("空置");
+      if (noTenant && Number(r.receivable||0) === 0 && Number(r.rentPart||0) === 0 && Number(r.electricUsage||0) === 0 && Number(r.waterUsage||0) === 0) return false;
+      return true;
+    });
+  }, [sortedRecords, properties]);
+
   const tenantOptions = useMemo(
     () => {
       const usageMap = new Map(
@@ -924,7 +938,7 @@ const RentRecordsPage = () => {
         <div className="mt-2 text-xs text-slate-500">提示：列表为精简视图，完整字段请在"编辑"或"打印"查看。</div>
         {/* 手机端：卡片视图 */}
         <div className="mt-3 grid gap-3 sm:hidden">
-          {sortedRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).map((item) => (
+          {visibleRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).map((item) => (
             <div key={item.id} className={`rounded-xl border p-3 ${flashRowId === item.id ? "bg-emerald-50 border-emerald-300" : "bg-white border-slate-200"}`}>
               <div className="flex items-center justify-between">
                 <div><span className="font-bold text-sm">{item.room||"-"}</span><span className="text-xs text-slate-400 ml-2">{item.cycle||"-"}</span></div>
@@ -972,7 +986,7 @@ const RentRecordsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).map((item) => (
+              {visibleRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).map((item) => (
                 <tr key={item.id} className={`border-t border-sky-50 transition-colors duration-300 ${flashRowId === item.id ? "bg-emerald-50" : ""}`}>
                   <td className="px-2 py-2 whitespace-nowrap">{item.room || "-"} {!activeTenantKeys.has(makeRoomKey((()=>{const p=parseRoomText(item.room||"");return p.building;})(), (()=>{const p=parseRoomText(item.room||"");return p.room;})())) && <span className="text-[10px] text-slate-400 bg-slate-100 rounded px-1">已退租</span>}</td>
                   <td className="px-2 py-2 whitespace-nowrap font-medium">{item.tenant || "-"}</td>
