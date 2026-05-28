@@ -14,7 +14,18 @@ export default function MeterReadingsReportPage() {
   const [localEdits, setLocalEdits] = useState({});
   const inputRef = useRef(null);
 
-  async function commitEdit() {
+  async function loadData() {
+    if (!apiEnabled) { setLoading(false); return; }
+    setLoading(true);
+    let ok = 0;
+    try { const r = await fetchRecords(); if (Array.isArray(r)) { setRecords(r); ok++; } } catch (_) {}
+    try { const p = await fetchProperties(); if (Array.isArray(p)) { setProperties(p); ok++; } } catch (_) {}
+    try { const t = await fetchTenants(); if (Array.isArray(t)) { setTenants(t); ok++; } } catch (_) {}
+    if (ok === 0) setMsg("请先登录后再查看");
+    setLoading(false);
+  }
+  useEffect(() => { loadData(); }, []);
+async function commitEdit() {
     if (!editCell || !editValue.trim()) { setEditCell(null); return; }
     const { room, cycle, field } = editCell;
     const parsed = parseRoomText(room);
@@ -38,9 +49,9 @@ export default function MeterReadingsReportPage() {
   }
 
   async function load() {
-    if (!apiEnabled) return; setLoading(true);
+    if (!apiEnabled) return; setLoading(true);/*patched-load*/
     try {
-      const [r, p, t] = await Promise.all([fetchRecords(), fetchProperties(), fetchTenants()]);
+      let r=null,p=null,t=null;try{r=await fetchRecords()}catch(_){};try{p=await fetchProperties()}catch(_){};try{t=await fetchTenants()}catch(_){};const __x = await Promise.all([fetchRecords(), fetchProperties(), fetchTenants()]);
       setRecords(Array.isArray(r) ? r : []);
       setProperties(Array.isArray(p) ? p : []);
       setTenants(Array.isArray(t) ? t : []);
@@ -91,7 +102,7 @@ export default function MeterReadingsReportPage() {
   return React.createElement("div",{className:"space-y-4 p-4"},
     React.createElement("div",{className:"flex items-center justify-between"},
       React.createElement("div",null,React.createElement("h1",{className:"text-2xl font-bold text-slate-900"},"水电对账"),React.createElement("p",{className:"text-sm text-slate-500"},"双击单元格可直接编辑读数")),
-      React.createElement("button",{className:"rounded-lg border border-sky-200 px-3 py-1.5 text-sm",onClick:load},"刷新")),
+      React.createElement("button",{className:"rounded-lg border border-sky-200 px-3 py-1.5 text-sm",onClick:loadData},"刷新")),
     msg ? React.createElement("div",{className:"rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-700"},msg) : null,
     React.createElement("div",{className:"overflow-x-auto rounded-2xl border border-slate-200 bg-white"},
       React.createElement("table",{className:"min-w-[1600px] text-xs md:text-sm"},
