@@ -12,8 +12,8 @@ const menuItems = [
   { path: "/monthly-rent", label: "月度收租", description: "生成、核对、收款与发送", icon: CalendarDays },
   { path: "/expenses", label: "支出台账", description: "水电、物业、税费与维修", icon: Wallet },
   { path: "/work-orders", label: "维修工单", description: "报修、处理、照片与费用联动", icon: Wrench },
-  { path: "/reports/meter-readings", label: "水电对账", description: "1~6月全房水電度數表", icon: BarChart3 },
-  { path: "/reports/vacant-rooms", label: "报表管理", description: "点击进入报表页", icon: BarChart3 },
+  { path: "/reports/meter-readings", label: "水電度數", description: "全房水電表月度讀數", icon: BarChart3 },
+  { path: "/reports/vacant-rooms", label: "空置报表", description: "空置率统计与房态一览", icon: BarChart3 },
   { path: "/help", label: "帮助文档", description: "本地化架构、部署与使用说明", icon: BookOpenText },
   { path: "/settings", label: "系统设置", description: "账号、安全、NAS 与域名配置", icon: Settings },
 ];
