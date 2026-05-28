@@ -1,5 +1,5 @@
-import React from "react";
-import { BarChart3, BookOpenText, Building2, CalendarDays, ClipboardSignature, Droplets, FileClock, LayoutDashboard, LogOut, Search, Settings, Users, Wallet, Wrench, X } from "lucide-react";
+import React, { useState } from "react";
+import { BarChart3, BookOpenText, ChevronDown, Building2, CalendarDays, ClipboardSignature, Droplets, FileClock, LayoutDashboard, LogOut, Search, Settings, Users, Wallet, Wrench, X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
 const menuItems = [
@@ -34,12 +34,28 @@ const Sidebar = ({ isOpen, onClose, onNavigate, currentPath }) => {
         <nav className="space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
+            if (item.children) {
+              const childActive = item.children.some(ch => currentPath === ch.path);
+              const isExpanded = expanded === item.label || childActive;
+              return <React.Fragment key={item.label}>
+                <button className={"w-full rounded-2xl px-4 py-3 text-left transition " + (childActive ? "bg-white text-blue-700 shadow-lg shadow-blue-950/15" : "bg-transparent text-blue-50 hover:bg-white/14")} onClick={() => setExpanded(isExpanded ? null : item.label)} type="button">
+                  <div className="flex items-start gap-3">
+                    <div className={"mt-0.5 rounded-xl p-2 " + (childActive ? "bg-blue-100" : "bg-white/15")}><Icon className={"h-4 w-4 " + (childActive ? "text-blue-700" : "text-white")} /></div>
+                    <div className="flex-1"><div className="text-[14px] font-semibold leading-5">{item.label}</div><div className={"mt-1 text-[12px] leading-5 " + (childActive ? "text-blue-600/90" : "text-blue-100/75")}>{item.description}</div></div>
+                    <ChevronDown className={"h-4 w-4 mt-1 transition " + (isExpanded ? "rotate-180" : "") + (childActive ? " text-blue-600" : " text-blue-100/75")} />
+                  </div>
+                </button>
+                {isExpanded && <div className="ml-4 space-y-1">
+                  {item.children.map(ch => <button key={ch.path} className={"w-full rounded-xl px-4 py-2.5 text-left text-sm transition " + (currentPath === ch.path ? "bg-white text-blue-700" : "text-blue-50 hover:bg-white/10")} onClick={() => onNavigate(ch.path)} type="button">{ch.label}</button>)}
+                </div>}
+              </React.Fragment>;
+            }
             const active = currentPath === item.path;
             return (
-              <button key={item.path} className={`w-full rounded-2xl px-4 py-3 text-left transition ${active ? "bg-white text-blue-700 shadow-lg shadow-blue-950/15" : "bg-transparent text-blue-50 hover:bg-white/14"}`} onClick={() => onNavigate(item.path)} type="button">
+              <button key={item.path} className={"w-full rounded-2xl px-4 py-3 text-left transition " + (active ? "bg-white text-blue-700 shadow-lg shadow-blue-950/15" : "bg-transparent text-blue-50 hover:bg-white/14")} onClick={() => onNavigate(item.path)} type="button">
                 <div className="flex items-start gap-3">
-                  <div className={`mt-0.5 rounded-xl p-2 ${active ? "bg-blue-100" : "bg-white/15"}`}><Icon className={`h-4 w-4 ${active ? "text-blue-700" : "text-white"}`} /></div>
-                  <div><div className="text-[14px] font-semibold leading-5">{item.label}</div><div className={`mt-1 text-[12px] leading-5 ${active ? "text-blue-600/90" : "text-blue-100/75"}`}>{item.description}</div></div>
+                  <div className={"mt-0.5 rounded-xl p-2 " + (active ? "bg-blue-100" : "bg-white/15")}><Icon className={"h-4 w-4 " + (active ? "text-blue-700" : "text-white")} /></div>
+                  <div><div className="text-[14px] font-semibold leading-5">{item.label}</div><div className={"mt-1 text-[12px] leading-5 " + (active ? "text-blue-600/90" : "text-blue-100/75")}>{item.description}</div></div>
                 </div>
               </button>
             );
