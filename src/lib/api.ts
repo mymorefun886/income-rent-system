@@ -277,6 +277,15 @@ export const saveMeterDraft = (p: Payload) =>
 export const deleteMeterDraft = (id: string) =>
   del(`/api/meter-drafts/${id}`);
 
+// ---- Meter Readings (水电对账报表) ----
+
+export const fetchMeterReadings = (cycle?: string) => {
+  const qs = cycle ? `?cycle=${encodeURIComponent(cycle)}` : "/all";
+  return get<Array<Record<string, unknown>>>(`/api/meter-readings${qs}`);
+};
+export const saveMeterReading = (p: Payload) =>
+  post("/api/meter-readings", p);
+
 // ---- Upload -----------------------------------------------------------------
 
 export async function uploadFile(file: File) {

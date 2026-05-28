@@ -34,6 +34,7 @@ const dbSchema = z.object({
   profitAlerts: z.array(z.record(z.unknown())).default([]),
   settings: z.record(z.unknown()).default({}),
   meterDrafts: z.array(z.record(z.unknown())).default([]),
+  meterReadings: z.array(z.record(z.unknown())).default([]),
 }).passthrough();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -3734,6 +3735,61 @@ async function handler(request, response) {
     db.meterDrafts = drafts;
     writeDb(db);
     return sendJson(response, 200, ok({ deleted: true }));
+  }
+
+  // == Meter Readings (水电对账报表: 独立读数存储) ==
+  if (request.method === "GET" && pathname === "/api/meter-readings") {
+    const queryCycle = String(url.searchParams.get("cycle") || "").trim();
+    const queryRoom = String(url.searchParams.get("room") || "").trim();
+    let items = db.meterReadings || [];
+    if (queryCycle) items = items.filter((d) => String(d.cycle || "") === queryCycle);
+    if (queryRoom) items = items.filter((d) => String(d.room || "") === queryRoom);
+    return sendJson(response, 200, ok(items));
+  }
+
+  if (request.method === "GET" && pathname === "/api/meter-readings/all") {
+    // Return all readings grouped by room for report
+    const items = db.meterReadings || [];
+    return sendJson(response, 200, ok(items));
+  }
+
+  if (request.method === "POST" && pathname === "/api/meter-readings") {
+    try {
+      const body = await parseBody(request);
+      const building = String(body.building || "").trim();
+      const room = String(body.room || "").trim();
+      const rdCycle = String(body.cycle || "").trim();
+      if (!building || !room || !rdCycle) {
+        return sendJson(response, 400, { success: false, message: "缺少 building/room/cycle" });
+      }
+      const readings = db.meterReadings || [];
+      const existing = readings.find(
+        (d) => String(d.building || "") === building && String(d.room || "") === room && String(d.cycle || "") === rdCycle,
+      );
+      const electricNow = String(body.electricNow ?? "").trim();
+      const waterNow = String(body.waterNow ?? "").trim();
+      const entry = {
+        id: existing?.id || `mr-${randomUUID()}`,
+        building,
+        room,
+        cycle: rdCycle,
+        electricNow: electricNow || (existing?.electricNow ?? ""),
+        waterNow: waterNow || (existing?.waterNow ?? ""),
+        source: body.source || existing?.source || "manual",
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (existing) {
+        Object.assign(existing, entry);
+      } else {
+        readings.push(entry);
+      }
+      db.meterReadings = readings;
+      writeDb(db);
+      return sendJson(response, 200, ok(entry));
+    } catch (e) {
+      return sendJson(response, 400, { success: false, message: `保存读数失败: ${String(e?.message || e || "")}` });
+    }
   }
 
   // 方案三: destructive 操作前自动备份
