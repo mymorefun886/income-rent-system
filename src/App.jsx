@@ -19,6 +19,7 @@ const RentRecordsPage = lazy(() => import("./pages/RentRecordsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const TenantsPage = lazy(() => import("./pages/TenantsPage"));
 const VacantRoomsReportPage = lazy(() => import("./pages/VacantRoomsReportPage"));
+const MeterReadingsReportPage = lazy(() => import("./pages/MeterReadingsReportPage"));
 const WorkOrdersPage = lazy(() => import("./pages/WorkOrdersPage"));
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const allRoutes = [
   { path: "/expenses", Page: ExpensesPage },
   { path: "/work-orders", Page: WorkOrdersPage },
   { path: "/reports/vacant-rooms", Page: VacantRoomsReportPage },
+  { path: "/reports/meter-readings", Page: MeterReadingsReportPage },
   { path: "/help", Page: HelpPage },
   { path: "/settings", Page: SettingsPage },
 ];

@@ -7,6 +7,7 @@ import PropertiesPage from "./pages/PropertiesPage";
 import RentRecordsPage from "./pages/RentRecordsPage";
 import SettingsPage from "./pages/SettingsPage";
 import TenantsPage from "./pages/TenantsPage";
+import MeterReadingsReportPage from "./pages/MeterReadingsReportPage";
 import VacantRoomsReportPage from "./pages/VacantRoomsReportPage";
 
 export const navItems = [
@@ -39,6 +40,12 @@ export const navItems = [
     to: "/records",
     icon: <FileClock className="h-4 w-4" />,
     page: <RentRecordsPage />,
+  },
+  {
+    title: "水电对账",
+    to: "/reports/meter-readings",
+    icon: <BarChart3 className="h-4 w-4" />,
+    page: <MeterReadingsReportPage />,
   },
   {
     title: "报表管理",

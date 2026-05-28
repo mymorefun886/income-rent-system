@@ -16,6 +16,7 @@ import {
   confirmMeterTask,
   markBillSent,
   updateRecord,
+  saveMeterReading,
   uploadFile,
 } from "../lib/api";
 import { rentRecords as fallbackRecords } from "../lib/mock-data";
@@ -494,6 +495,13 @@ const RentRecordsPage = () => {
       } else {
         const local = { ...payload, id: editing?.id || `rec-local-${Date.now()}` };
         setRecords((prev) => (editing ? prev.map((x) => (x.id === editing.id ? local : x)) : [local, ...prev]));
+      }
+      // Sync meter readings to report
+      if (apiEnabled && form.cycle) {
+        try {
+          const parsed = parseRoomText(form.room);
+          saveMeterReading({ building: parsed.building, room: parsed.room, cycle: form.cycle, electricNow: String(computed.electricNow ?? ""), waterNow: String(computed.waterNow ?? ""), source: "bill_sync" });
+        } catch (_) {}
       }
       setFormOpen(false);
       setError("");

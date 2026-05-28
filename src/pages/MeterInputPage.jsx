@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, Printer, RefreshCw, Send, Upload } from "lucide-react";
-import { apiEnabled, createRecord, fetchMeterDrafts, fetchProperties, fetchRecords, fetchTenants, saveMeterDraft, updateRecord } from "../lib/api";
+import { apiEnabled, createRecord, fetchMeterDrafts, fetchProperties, fetchRecords, fetchTenants, saveMeterDraft, saveMeterReading, updateRecord } from "../lib/api";
 import ConfirmDialog from "../components/ConfirmDialog";
 
 function makeRoomKey(b, r) { return (b||"").trim()+"::"+(r||"").replace(/\s+/g,"").toUpperCase(); }
@@ -270,6 +270,15 @@ export default function MeterInputPage() {
         } catch (_) {}
       }
       setMsg(`同步完成：更新 ${updated} 条，新建 ${created} 条（自用/空置房跳过）`);
+      // Sync meter readings to report
+      if (apiEnabled) {
+        try {
+          for (const [rid, vals] of Object.entries(readings).filter(([,v]) => v.e || v.w)) {
+            const [bld, room] = rid.split("::");
+            await saveMeterReading({ building: bld, room, cycle, electricNow: vals.e, waterNow: vals.w, source: "meter_sync" });
+          }
+        } catch (_) {}
+      }
       localStorage.removeItem(STORAGE_KEY);
       setReadings({});
       setSavedCount(0);
