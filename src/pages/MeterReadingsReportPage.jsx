@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { apiEnabled, fetchMeterReadings, fetchProperties, fetchRecords, fetchTenants } from "../lib/api";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { apiEnabled, fetchMeterReadings, fetchProperties, fetchRecords, fetchTenants, saveMeterReading } from "../lib/api";
 import { makeRoomKey, parseRoomText } from "../lib/recordUtils";
 
 export default function MeterReadingsReportPage() {
@@ -10,9 +10,27 @@ export default function MeterReadingsReportPage() {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
+  const [editCell, setEditCell] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const inputRef = useRef(null);
+
+  async function commitEdit() {
+    if (!editCell || !editValue.trim()) { setEditCell(null); return; }
+    const { building, room, cycle, field } = editCell;
+    try {
+      await saveMeterReading({ building, room, cycle, [field]: editValue.trim(), source: "manual_edit" });
+      setReadings(prev => {
+        const next = prev.filter(r => !(r.building===building&&r.room===room&&r.cycle===cycle&&r.source==="manual_edit"));
+        next.push({ id: "mr-tmp-"+Date.now(), building, room, cycle, electricNow: field==="electricNow"?editValue.trim():"", waterNow: field==="waterNow"?editValue.trim():"", source: "manual_edit" });
+        return next;
+      });
+      setMsg("已保存");
+    } catch (e) { setMsg("保存失败: "+(e.message||e)); }
+    setEditCell(null);
+  }
+
   async function load() {
-    if (!apiEnabled) return;
-    setLoading(true);
+    if (!apiEnabled) return; setLoading(true);
     try {
       const [r, m, p, t] = await Promise.all([fetchRecords(), fetchMeterReadings(), fetchProperties(), fetchTenants()]);
       setRecords(Array.isArray(r) ? r : []); setReadings(Array.isArray(m) ? m : []);
@@ -32,11 +50,39 @@ export default function MeterReadingsReportPage() {
     rooms.sort((a, b) => { const bc = a.building.localeCompare(b.building, "zh"); if (bc) return bc; const na = parseInt((a.room || "").match(/d+/)?.[0] || "0"); const nb = parseInt((b.room || "").match(/d+/)?.[0] || "0"); return na - nb || (a.room || "").localeCompare(b.room || ""); });
     return { rooms };
   }, [readings, records, properties, cycles]);
+
   const isSelfUse = (building, room) => (properties || []).some(p => makeRoomKey(p.building, p.room) === makeRoomKey(building, room) && p.usageType === "自用（不出租）");
+
+  function renderCell(building, room, cycle, field, value, hasData) {
+    const cellKey = building+"::"+room+"::"+cycle+"::"+field;
+    const editing = editCell && editCell.building===building && editCell.room===room && editCell.cycle===cycle && editCell.field===field;
+    if (editing) {
+      return React.createElement("input",{
+        ref:inputRef,
+        type:"number",step:field==="waterNow"?"0.1":"1",
+        className:"w-full rounded border border-sky-400 px-1 py-0.5 text-center text-xs bg-white",
+        defaultValue:editValue,
+        autoFocus:true,
+        onBlur:commitEdit,
+        onKeyDown:e => { if(e.key==="Enter") commitEdit(); if(e.key==="Escape") setEditCell(null); }
+      });
+    }
+    return React.createElement("td",{
+      className:"px-1 py-1.5 text-center cursor-pointer hover:bg-sky-50"+(hasData?" text-slate-800":" text-slate-300")+(field==="electricNow"?" border-l border-slate-50":""),
+      onDoubleClick:() => {
+        const v = hasData ? value : "";
+        setEditValue(String(v));
+        setEditCell({building,room,cycle,field});
+        setTimeout(() => { if(inputRef.current) inputRef.current.focus(); }, 50);
+      },
+      title:"双击编辑"
+    }, hasData ? value : "-");
+  }
+
   if (loading) return React.createElement("div",{className:"flex items-center justify-center min-h-screen"},React.createElement("p",{className:"text-slate-500"},"加载中..."));
   return React.createElement("div",{className:"space-y-4 p-4"},
     React.createElement("div",{className:"flex items-center justify-between"},
-      React.createElement("div",null,React.createElement("h1",{className:"text-2xl font-bold text-slate-900"},"水电对账"),React.createElement("p",{className:"text-sm text-slate-500"},"所有房间水电度数记录")),
+      React.createElement("div",null,React.createElement("h1",{className:"text-2xl font-bold text-slate-900"},"水电对账"),React.createElement("p",{className:"text-sm text-slate-500"},"双击单元格可直接编辑读数")),
       React.createElement("button",{className:"rounded-lg border border-sky-200 px-3 py-1.5 text-sm",onClick:load},"刷新")),
     msg ? React.createElement("div",{className:"rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-700"},msg) : null,
     React.createElement("div",{className:"overflow-x-auto rounded-2xl border border-slate-200 bg-white"},
@@ -55,7 +101,12 @@ export default function MeterReadingsReportPage() {
             return React.createElement("tr",{key:makeRoomKey(room.building,room.room),className:"border-t border-slate-100"+(selfUse?" bg-slate-50":"")},
               React.createElement("td",{className:"sticky left-0 z-10 bg-white px-3 py-1.5 whitespace-nowrap font-medium"},room.building+" "+room.room,selfUse?React.createElement("span",{className:"ml-1 text-[10px] text-slate-400 bg-slate-100 rounded px-1"},"自用"):null),
               React.createElement("td",{className:"px-2 py-1.5 text-xs text-slate-400"},selfUse?"自用":tenant?(tenant.archived?"已退租":"在租"):"空置"),
-              cycles.map(c => { const rd = room.readings[c]; const hd = rd && (rd.electricNow || rd.waterNow); return React.createElement(React.Fragment,{key:c+"-"+room.room},React.createElement("td",{className:"px-1 py-1.5 text-center border-l border-slate-50"+(hd?" text-slate-800":" text-slate-300")},hd?rd.electricNow:"-"),React.createElement("td",{className:"px-1 py-1.5 text-center"+(hd?" text-slate-800":" text-slate-300")},hd?rd.waterNow:"-")); })
+              cycles.map(c => {
+                const rd = room.readings[c]; const hd = rd && (rd.electricNow || rd.waterNow);
+                return React.createElement(React.Fragment,{key:c+"-"+room.room},
+                  renderCell(room.building, room.room, c, "electricNow", hd?rd.electricNow:"-", hd),
+                  renderCell(room.building, room.room, c, "waterNow", hd?rd.waterNow:"-", hd));
+              })
             );
           }))
       ))
