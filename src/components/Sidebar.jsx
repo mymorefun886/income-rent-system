@@ -22,6 +22,7 @@ const menuItems = [
 
 const Sidebar = ({ isOpen, onClose, onNavigate, currentPath }) => {
   const { logout } = useAuth();
+  const [expanded, setExpanded] = useState(false);
   return (
     <>
       {isOpen ? <button aria-label="关闭菜单遮罩" className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden" onClick={onClose} type="button" /> : null}
