@@ -444,6 +444,30 @@ const RentRecordsPage = () => {
     }))));
   }
 
+  // 新增/编辑账单时切换周期，自动更新上月水电读数
+  function handleFormCycleChange(newCycle) {
+    setForm((prev) => {
+      const roomKey = (() => {
+        const p = parseRoomText(prev.room || "");
+        return p.building ? makeRoomKey(p.building, p.room) : "";
+      })();
+      if (!roomKey) return { ...prev, cycle: newCycle, dueDate: `${newCycle}-10` };
+      const prevRecords = (records || [])
+        .filter((r) => normalizeRoomMatch(r.room) === normalizeRoomMatch(prev.room) && String(r.cycle || "") < newCycle)
+        .sort((a, b) => String(b.cycle || "").localeCompare(String(a.cycle || "")));
+      const last = prevRecords[0] || null;
+      const electricPrev = last?.electricNow ?? "";
+      const waterPrev = last?.waterNow ?? "";
+      return recalcReceivable(applyOtherFeeParts(applyMeterAutoFields({
+        ...prev,
+        cycle: newCycle,
+        dueDate: `${newCycle}-10`,
+        electricPrev: String(electricPrev),
+        waterPrev: String(waterPrev),
+      })));
+    });
+  }
+
   useEffect(() => {
     if (!formOpen || form.tenantId) return;
     const name = String(form.tenant || "").trim();
@@ -1218,7 +1242,7 @@ const RentRecordsPage = () => {
                 )}
               </label>
               <label className="text-sm">租客姓名<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.tenant} readOnly /></label>
-              <label className="text-sm">周期<input type="month" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.cycle} onChange={(e) => setForm((p) => ({ ...p, cycle: e.target.value, dueDate: e.target.value ? `${e.target.value}-10` : p.dueDate }))} /></label>
+              <label className="text-sm">周期<input type="month" className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.cycle} onChange={(e) => handleFormCycleChange(e.target.value)} /></label>
               <label className="text-sm">租金<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.rentPart} onChange={(e) => setForm((p) => recalcReceivable({ ...p, rentPart: e.target.value }))} /></label>
               <label className="text-sm">应收<input className="mt-1 w-full rounded border border-sky-200 bg-slate-50 px-2 py-2" value={form.receivable} readOnly /></label>
               <label className="text-sm">已收<input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={form.received} onChange={(e) => setForm((p) => ({ ...p, received: e.target.value }))} /></label>
