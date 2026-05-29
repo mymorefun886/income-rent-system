@@ -20,6 +20,9 @@ export default function MeterInputPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [afkTimer, setAfkTimer] = useState(null);
   const readingsCycleRef = useRef(null); // 记录首次填写读数时的账期，用于防误同步
+  const [previewData, setPreviewData] = useState(null); // 同步预览数据
+  const [showPreview, setShowPreview] = useState(false); // 预览弹窗
+  const [syncResult, setSyncResult] = useState(null); // 同步结果 { total, updated, created, skipped }
 
   // 方案二: 离开页面提醒
   useEffect(() => {
@@ -99,16 +102,41 @@ export default function MeterInputPage() {
     setCycle(newCycle);
   }
 
+  function calculatePreview() {
+    const entries = Object.entries(readings).filter(([,v]) => v.e || v.w);
+    if (!entries.length) { setMsg("没有填写任何读数"); return; }
+    const data = entries.map(([rid, vals]) => {
+      const [bld, room] = rid.split("::");
+      const roomText = bld + " " + room;
+      const tenant = tenants.find(t => !t.archived && makeRoomKey(t.building,t.room) === rid);
+      const existing = records.find(r => {
+        const rt = String(r.room||"");
+        return (rt === roomText || rt.includes(room)) && String(r.cycle||"").trim() === cycle;
+      });
+      const isPaid = existing && existing.status === "已收" && Number(existing.received||0) >= Number(existing.receivable||0);
+      return {
+        rid, room: roomText, tenantName: tenant?.name || (existing?.tenant || (properties.find(p => makeRoomKey(p.building,p.room) === rid)?.usageType === "自用（不出出租）" ? "自用" : "空置")),
+        hasTenant: !!tenant,
+        prevElec: existing?.electricNow || "",
+        newElec: vals.e,
+        prevWater: existing?.waterNow || "",
+        newWater: vals.w,
+        isNewRecord: !existing,
+        isPaid, // 已收帐单不修改
+        billAction: isPaid ? "已收，跳过" : (tenant ? (existing ? "更新" : "产生") : "不产生"),
+      };
+    });
+    setPreviewData(data);
+    setShowPreview(true);
+  }
+
   function handleSyncClick() {
-    const existingCount = records.filter(r => String(r.cycle || "").trim() === cycle).length;
-    // 读数归属月份与目标月份不一致时，强制弹窗提醒
+    // 先算预览，不直接同步
     if (readingsCycleRef.current && readingsCycleRef.current !== cycle) {
       setConfirmOpen(true);
-    } else if (existingCount > 0) {
-      setConfirmOpen(true);
-    } else {
-      syncToSystem();
+      return;
     }
+    calculatePreview();
   }
 
   function applyCsvRows(rows) {
@@ -245,12 +273,13 @@ export default function MeterInputPage() {
     });
   }
 
-  async function syncToSystem() {
+  async function syncToSystem(skipRids) {
     const entries = Object.entries(readings).filter(([,v]) => v.e || v.w);
     if (!entries.length) { setMsg("没有填写任何读数"); return; }
     setSaving(true);
+    const skipSet = new Set(skipRids || []);
     try {
-      let updated = 0, created = 0;
+      let updated = 0, created = 0, skipped = 0;
       for (const [rid, vals] of entries) {
         const [bld, room] = rid.split("::");
         const roomText = bld + " " + room;
@@ -294,8 +323,10 @@ export default function MeterInputPage() {
         else if (Number(payload.received)>0) payload.status = "部份收取";
         else payload.status = "未收";
 
+        if (skipSet.has(rid)) { skipped++; continue; }
         if (existing) { await updateRecord(existing.id, { ...existing, ...payload, id: existing.id }); updated++; }
         else if (tenant) { await createRecord(payload); created++; }
+        else { skipped++; }
       }
       // 同步成功后清理远端草稿
       if (apiEnabled) {
@@ -306,7 +337,8 @@ export default function MeterInputPage() {
           }
         } catch (_) {}
       }
-      setMsg(`同步完成：更新 ${updated} 条，新建 ${created} 条（自用/空置房跳过）`);
+      setSyncResult({ total: entries.length, updated, created, skipped, paidSkipped: skipSet.size });
+      setMsg(`✅ 同步成功：${entries.length} 间读数已写入 ${cycle}，更新 ${updated} 条账单，新建 ${created} 条，跳过 ${skipped} 条`);
       // Sync meter readings to report
       if (apiEnabled) {
         try {
@@ -322,6 +354,12 @@ export default function MeterInputPage() {
       load();
     } catch(e) { setMsg(e.message||"同步失败"); }
     finally { setSaving(false); }
+  }
+
+  function handleConfirmSync() {
+    setShowPreview(false);
+    const skipRids = previewData.filter(d => d.isPaid).map(d => d.rid);
+    syncToSystem(skipRids);
   }
 
   function downloadMeterHtml() {
@@ -454,12 +492,58 @@ export default function MeterInputPage() {
       <div className="sticky bottom-2 bg-white rounded-2xl p-3 shadow-lg ring-1 ring-slate-200 space-y-2">
         <div className="flex gap-2">
           <button className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-medium" onClick={() => { setReadings({}); localStorage.removeItem(STORAGE_KEY); setSavedCount(0); readingsCycleRef.current = null; }}>清空读数</button>
-          <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={handleSyncClick}><Send className="inline h-4 w-4 mr-1" />{saving ? "同步中..." : `一键同步到 ${cycle}`}</button>
+          <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={handleSyncClick}><Send className="inline h-4 w-4 mr-1" />{saving ? "同步中..." : `预览同步到 ${cycle}`}</button>
         </div>
       </div>
 
+
+
+      {/* Sync result prompt */}
+      {syncResult && !saving && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4">
+          <div className="max-w-sm rounded-2xl bg-white p-5 shadow-xl text-center">
+            <div className="text-2xl mb-2">✅</div>
+            <p className="text-sm text-slate-700">同步成功：{syncResult.total} 间读数已写入 {cycle}</p>
+            <p className="text-xs text-slate-500 mt-1">更新 {syncResult.updated} 条 账单 · 新建 {syncResult.created} 条 · 跳过 {syncResult.skipped} 条</p>
+            <div className="mt-4 flex justify-center gap-2">
+              <button className="rounded-xl border border-slate-300 px-4 py-2 text-sm" onClick={()=>{setSyncResult(null);}}>留在本页</button>
+              <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white font-bold" onClick={()=>{setSyncResult(null);window.location.href="/rent-records";}}>查看收租账单</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {showPreview && previewData && (
+        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/35 p-4" onClick={()=>setShowPreview(false)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-4 my-4 shadow-xl" onClick={e=>e.stopPropagation()}>
+            <h3 className="text-lg font-semibold">同步预览</h3>
+            <p className="text-sm text-slate-500 mt-1">目标月份：{cycle}</p>
+            <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-slate-200">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr><th className="px-2 py-1.5 text-left">房号</th><th className="px-2 py-1.5 text-left">租客</th><th className="px-2 py-1.5 text-center">电</th><th className="px-2 py-1.5 text-center">水</th><th className="px-2 py-1.5 text-center">账单</th></tr>
+                </thead>
+                <tbody>{previewData.map(d=>(
+                  <tr key={d.rid} className{"border-t border-slate-50"+(d.isPaid?" bg-amber-50":"")}>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{d.room.replace(/.*s/,"")}</td>
+                    <td className{"px-2 py-1.5"+(d.hasTenant?"":" text-slate-400")}>{d.tenantName}</td>
+                    <td className="px-2 py-1.5 text-center">{d.prevElec?d.prevElec+"→":""}{d.newElec||"-"}</td>
+                    <td className="px-2 py-1.5 text-center">{d.prevWater?d.prevWater+"→":""}{d.newWater||"-"}</td>
+                    <td className{"px-2 py-1.5 text-center text-[10px]"+(d.isPaid?" text-amber-700 font-bold":" text-slate-500")}>{d.billAction}</td>
+                  </tr>))}</tbody>
+              </table>
+            </div>
+            <div className="mt-2 text-xs text-slate-500">{previewData.filter(d=>d.billAction==="更新"||d.billAction==="产生").length} 间将更新账单，{previewData.filter(d=>d.billAction==="不产生").length} 间跳过（无租客），{previewData.filter(d=>d.isPaid).length} 间已收账单不受影响</div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="rounded-xl border border-slate-300 px-4 py-2 text-sm text-slate-700" onClick={()=>setShowPreview(false)}>取消</button>
+              <button className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white" onClick={handleConfirmSync}>确认同步</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmDialog
-        open={confirmOpen}
         title={
           readingsCycleRef.current && readingsCycleRef.current !== cycle
             ? "⚠️ 账期不匹配，请确认"
@@ -474,7 +558,7 @@ export default function MeterInputPage() {
         confirmText="确认同步"
         cancelText="取消"
         tone="warn"
-        onConfirm={() => { setConfirmOpen(false); syncToSystem(); }}
+        onConfirm={() => { setConfirmOpen(false); calculatePreview(); }}
         onCancel={() => setConfirmOpen(false)}
       />
     </div>
