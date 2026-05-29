@@ -19,6 +19,7 @@ export default function MeterInputPage() {
   const [csvPasteText, setCsvPasteText] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [afkTimer, setAfkTimer] = useState(null);
+  const readingsCycleRef = useRef(null); // 记录首次填写读数时的账期，用于防误同步
 
   // 方案二: 离开页面提醒
   useEffect(() => {
@@ -79,9 +80,31 @@ export default function MeterInputPage() {
     setSavedCount(Object.keys(data).filter(k => data[k]?.e || data[k]?.w).length);
   }
 
+  // 账期切换拦截：已有读数时弹窗确认是否清空
+  function handleCycleChange(newCycle) {
+    if (newCycle === cycle) return;
+    const hasReadings = Object.values(readings).some(v => v.e || v.w);
+    if (hasReadings && readingsCycleRef.current) {
+      const count = Object.values(readings).filter(v => v.e || v.w).length;
+      const ok = window.confirm(
+        `当前已填写 ${count} 间房的读数（属于 ${readingsCycleRef.current} 月），\n切换账期到 ${newCycle} 月后将清空所有已填读数，是否继续？`
+      );
+      if (!ok) return;
+      // 用户确认清空
+      setReadings({});
+      localStorage.removeItem(STORAGE_KEY);
+      setSavedCount(0);
+      readingsCycleRef.current = null;
+    }
+    setCycle(newCycle);
+  }
+
   function handleSyncClick() {
     const existingCount = records.filter(r => String(r.cycle || "").trim() === cycle).length;
-    if (existingCount > 0) {
+    // 读数归属月份与目标月份不一致时，强制弹窗提醒
+    if (readingsCycleRef.current && readingsCycleRef.current !== cycle) {
+      setConfirmOpen(true);
+    } else if (existingCount > 0) {
       setConfirmOpen(true);
     } else {
       syncToSystem();
@@ -100,6 +123,7 @@ export default function MeterInputPage() {
     }
     setReadings(next);
     saveLocal(next);
+    readingsCycleRef.current = cycle; // CSV导入的读数归属当前账期
     // 方案一: CSV导入也自动存后端
     if (apiEnabled) {
       for (const row of rows) {
@@ -200,6 +224,9 @@ export default function MeterInputPage() {
   }, [properties, records]);
 
   function setReading(rid, field, val) {
+    if (val && !readingsCycleRef.current) {
+      readingsCycleRef.current = cycle; // 记录首次填写读数时的账期
+    }
     setReadings(prev => {
       const cur = prev[rid] || { e: "", w: "" };
       const next = { ...prev, [rid]: { ...cur, [field]: val } };
@@ -356,7 +383,7 @@ export default function MeterInputPage() {
         <h1 className="text-lg font-bold">📱 手机抄表</h1>
         <p className="text-xs opacity-80 mt-1">{savedCount > 0 ? `已暂存 ${savedCount} 间 · ` : ""}填数自动存云端 · 不怕丢</p>
         <div className="mt-2 flex items-center gap-2">
-          <input className="rounded-lg px-3 py-1.5 text-sm text-slate-900" type="month" value={cycle} onChange={e => setCycle(e.target.value)} />
+          <input className="rounded-lg px-3 py-1.5 text-sm text-slate-900" type="month" value={cycle} onChange={e => handleCycleChange(e.target.value)} />
           <button className="rounded-lg bg-white/20 px-3 py-1.5 text-xs" onClick={load}><RefreshCw className="inline h-3 w-3 mr-1" />刷新</button>
         </div>
       </div>
@@ -411,8 +438,8 @@ export default function MeterInputPage() {
 
       <div className="sticky bottom-2 bg-white rounded-2xl p-3 shadow-lg ring-1 ring-slate-200 space-y-2">
         <div className="flex gap-2">
-          <button className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-medium" onClick={() => { setReadings({}); localStorage.removeItem(STORAGE_KEY); setSavedCount(0); }}>清空读数</button>
-          <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={handleSyncClick}><Send className="inline h-4 w-4 mr-1" />{saving?"同步中...":"一键同步"}</button>
+          <button className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-medium" onClick={() => { setReadings({}); localStorage.removeItem(STORAGE_KEY); setSavedCount(0); readingsCycleRef.current = null; }}>清空读数</button>
+          <button className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={saving || !Object.values(readings).some(v=>v.e||v.w)} onClick={handleSyncClick}><Send className="inline h-4 w-4 mr-1" />{saving ? "同步中..." : `一键同步到 ${cycle}`}</button>
         </div>
         <div className="flex gap-2">
           <button className="flex-1 rounded-xl bg-emerald-50 border border-emerald-200 py-2.5 text-sm font-medium text-emerald-700" onClick={downloadMeterHtml}><Download className="inline h-4 w-4 mr-1" />下载离线页</button>
@@ -422,8 +449,17 @@ export default function MeterInputPage() {
 
       <ConfirmDialog
         open={confirmOpen}
-        title="该账期已有账单记录"
-        message={`该账期已有 ${records.filter(r => String(r.cycle || "").trim() === cycle).length} 条账单，同步将覆盖现有电费/水费数据。`}
+        title={
+          readingsCycleRef.current && readingsCycleRef.current !== cycle
+            ? "⚠️ 账期不匹配，请确认"
+            : "该账期已有账单记录"
+        }
+        message={
+          (readingsCycleRef.current && readingsCycleRef.current !== cycle
+            ? `⚠️ 当前读数填写于 ${readingsCycleRef.current} 月，但同步目标为 ${cycle} 月！\n\n`
+            : "") +
+          `该账期已有 ${records.filter(r => String(r.cycle || "").trim() === cycle).length} 条账单，同步将覆盖现有电费/水费数据。\n\n请确认月份无误后再操作。`
+        }
         confirmText="确认同步"
         cancelText="取消"
         tone="warn"
