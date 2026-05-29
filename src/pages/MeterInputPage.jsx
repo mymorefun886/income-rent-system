@@ -390,6 +390,11 @@ export default function MeterInputPage() {
 
       {msg && <div className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-700">{msg}</div>}
 
+      {/* 月份大字指示器：视觉防错，一眼看出当前操作月份 */}
+      <div className="text-center text-base font-bold text-red-600 bg-red-50 rounded-xl py-1.5">
+        📅 当前操作月份：{cycle}
+      </div>
+
       <details className="rounded-2xl bg-white ring-1 ring-slate-200 overflow-hidden">
         <summary className="px-4 py-2.5 text-sm font-semibold text-slate-600 cursor-pointer bg-slate-50">📋 CSV 导入读数</summary>
         <div className="p-3 space-y-2">
