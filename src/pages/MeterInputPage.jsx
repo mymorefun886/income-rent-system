@@ -207,6 +207,17 @@ export default function MeterInputPage() {
       if (!p || String(r.cycle||"") > String(p.cycle||"")) lastMap.set(key, { e: r.electricNow||"", w: r.waterNow||"" });
     });
     return properties
+      .filter(p => {
+        const key = makeRoomKey(p.building, p.room);
+        const usageType = usageMap.get(key);
+        // 自用房间默认隐藏，但需要记录水电度数的保留（如502月底计算成本）
+        if (usageType === "自用（不出租）") {
+          // 需要显示的自用房列表
+          const showSelfUse = new Set([makeRoomKey("西山东区30号A", "502")]);
+          return showSelfUse.has(key);
+        }
+        return true;
+      })
       .sort((a,b) => {
         const bc = String(a.building||"").localeCompare(String(b.building||""),"zh-Hans-CN");
         if (bc) return bc;
