@@ -207,7 +207,6 @@ export default function MeterInputPage() {
       if (!p || String(r.cycle||"") > String(p.cycle||"")) lastMap.set(key, { e: r.electricNow||"", w: r.waterNow||"" });
     });
     return properties
-      .filter(p => usageMap.get(makeRoomKey(p.building,p.room)) !== "自用（不出租）")
       .sort((a,b) => {
         const bc = String(a.building||"").localeCompare(String(b.building||""),"zh-Hans-CN");
         if (bc) return bc;
