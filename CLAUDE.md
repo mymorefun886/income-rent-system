@@ -21,3 +21,9 @@
 - Backend is ESM (type="module" in package.json)
 - 統一用繁體中文回覆
 - 機密資訊（密碼、API key）絕對不能寫進程式碼
+## Changelog
+- 每次修改代码或数据后，必须同步更新 CHANGELOG.md
+- 格式：v主版本.次版本.修订（Semver）
+- 代码改动 → 归在「代码线」
+- 数据修复/清理 → 归在「数据线」，文件名自述
+- 更新后连同 CHANGELOG.md 一起 commit 推送

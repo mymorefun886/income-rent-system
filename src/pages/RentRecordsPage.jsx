@@ -112,6 +112,15 @@ const RentRecordsPage = () => {
   const [waterMinimumEdited, setWaterMinimumEdited] = useState(false);
   const [printPayQrUrl, setPrintPayQrUrl] = useState(() => localStorage.getItem("income-print-pay-qr") || "");
 
+  // ---- 批量操作状态 ----
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [searchTerm, setSearchTerm] = useState("");
+  const [cycleFilter, setCycleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [batchEditOpen, setBatchEditOpen] = useState(false);
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [batchForm, setBatchForm] = useState({ status: "", received: "", rentPart: "", electricPrice: "", waterPrice: "", sentStatus: "", note: "" });
+
 
   const totals = useMemo(() => {
     const receivable = records.reduce((s, x) => s + Number(x.receivable || 0), 0);
@@ -145,9 +154,10 @@ const RentRecordsPage = () => {
     });
   }, [records]);
 
-  // 过滤：自用房、空置无记录的房间隐藏
+  // 过滤：自用房、空置无记录的房间隐藏 + 搜索/周期/状态筛选
   const visibleRecords = useMemo(() => {
     const usageMap = new Map((properties||[]).map(p => [makeRoomKey(p.building,p.room), String(p.usageType||"")]));
+    const term = (searchTerm||"").trim().toLowerCase();
     return sortedRecords.filter(r => {
       // 自用房 → 隐藏
       const p = parseRoomText(r.room||"");
@@ -155,9 +165,15 @@ const RentRecordsPage = () => {
       // 空置/无租客 且 无任何租金水电 → 隐藏
       const noTenant = !r.tenant || r.tenant === "-" || String(r.tenant||"").startsWith("空置");
       if (noTenant && Number(r.receivable||0) === 0 && Number(r.rentPart||0) === 0 && Number(r.electricUsage||0) === 0 && Number(r.waterUsage||0) === 0) return false;
+      // 租客名称搜索
+      if (term && !String(r.tenant||"").toLowerCase().includes(term) && !String(r.room||"").toLowerCase().includes(term)) return false;
+      // 周期筛选
+      if (cycleFilter !== "all" && String(r.cycle||"") !== cycleFilter) return false;
+      // 状态筛选
+      if (statusFilter !== "all" && String(r.status||"") !== statusFilter) return false;
       return true;
     });
-  }, [sortedRecords, properties]);
+  }, [sortedRecords, properties, searchTerm, cycleFilter, statusFilter]);
 
   const tenantOptions = useMemo(
     () => {
@@ -189,6 +205,11 @@ const RentRecordsPage = () => {
   }, [records]);
 
   const activeTenantKeys = useMemo(() => new Set((tenants||[]).filter(t=>!t.archived).map(t=>makeRoomKey(t.building,t.room))), [tenants]);
+
+  const cycleOptions = useMemo(() => {
+    const cycles = new Set((records||[]).map(r => String(r.cycle||"")).filter(Boolean));
+    return ["all", ...[...cycles].sort((a,b) => b.localeCompare(a, "zh-Hans-CN"))];
+  }, [records]);
 
   const roomOptions = useMemo(() => {
     const fromTenants = (tenants || [])
@@ -522,6 +543,67 @@ const RentRecordsPage = () => {
         setRecords((prev) => prev.filter((x) => x.id !== item.id));
       } catch (e) { setError(e.message || "删除失败"); }
     });
+  }
+
+  // ---- 批量选择 ----
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleSelectAll() {
+    const filtered = visibleRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter);
+    const allIds = filtered.map(r => r.id);
+    setSelectedIds(prev => {
+      const allSelected = allIds.every(id => prev.has(id));
+      return allSelected ? new Set() : new Set(allIds);
+    });
+  }
+
+  async function handleBatchEdit() {
+    const updates = [];
+    selectedIds.forEach(id => {
+      const rec = records.find(r => r.id === id);
+      if (!rec) return;
+      const patch = {};
+      if (batchForm.status) patch.status = batchForm.status;
+      if (batchForm.received !== "") patch.received = Number(batchForm.received);
+      if (batchForm.rentPart !== "") patch.rentPart = Number(batchForm.rentPart);
+      if (batchForm.electricPrice !== "") patch.electricPrice = Number(batchForm.electricPrice);
+      if (batchForm.waterPrice !== "") patch.waterPrice = Number(batchForm.waterPrice);
+      if (batchForm.sentStatus) { patch.sentStatus = batchForm.sentStatus; if (batchForm.sentStatus === "sent") patch.sentAt = new Date().toISOString(); }
+      if (batchForm.note !== "") patch.note = batchForm.note;
+      if (Object.keys(patch).length > 0) updates.push(updateRecord(id, { ...rec, ...patch, id }));
+    });
+    if (updates.length === 0) return;
+    try {
+      const saved = await Promise.all(updates);
+      setRecords(prev => prev.map(r => { const s = saved.find(x => x.id === r.id); return s || r; }));
+      setBatchEditOpen(false);
+      setSelectedIds(new Set());
+      setBatchForm({ status: "", received: "", rentPart: "", electricPrice: "", waterPrice: "", sentStatus: "", note: "" });
+      setError(`已批量更新 ${saved.length} 条记录`);
+    } catch (e) { setError(e.message || "批量编辑失败"); }
+  }
+
+  async function handleBatchDelete() {
+    const ids = [...selectedIds];
+    openConfirm(
+      "批量删除账单",
+      `确认删除 ${ids.length} 条账单记录？此操作不可撤销。`,
+      async () => {
+        closeConfirm();
+        setBatchDeleteOpen(false);
+        try {
+          if (apiEnabled) await Promise.all(ids.map(id => deleteRecord(id).catch(() => {})));
+          setRecords(prev => prev.filter(r => !ids.includes(r.id)));
+          setSelectedIds(new Set());
+          setError(`已删除 ${ids.length} 条记录`);
+        } catch (e) { setError(e.message || "批量删除失败"); }
+      }
+    );
   }
 
   async function clearAll() {
@@ -935,22 +1017,45 @@ const RentRecordsPage = () => {
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <div className="flex flex-wrap items-center gap-3">
+        {/* 筛选工具栏 */}
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold">账单列表</h2>
+          <input className="rounded-lg border border-slate-300 px-2 py-1 text-sm w-32" type="text" placeholder="搜租客/房号" value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setSelectedIds(new Set()); }} />
+          <select className="rounded-lg border border-slate-300 px-2 py-1 text-sm" value={cycleFilter} onChange={e => { setCycleFilter(e.target.value); setSelectedIds(new Set()); }}>
+            <option value="all">全部周期</option>
+            {cycleOptions.filter(c => c !== "all").map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select className="rounded-lg border border-slate-300 px-2 py-1 text-sm" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setSelectedIds(new Set()); }}>
+            <option value="all">全部状态</option>
+            <option value="未收">未收</option>
+            <option value="部份收取">部份收取</option>
+            <option value="已收">已收</option>
+          </select>
           <select className="rounded-lg border border-slate-300 px-2 py-1 text-sm" value={roomFilter} onChange={(e) => setRoomFilter(e.target.value)}>
             <option value="all">全部房号</option>
             {roomOptions.map((x) => <option key={x.key} value={x.key}>{x.label || x.roomText}</option>)}
           </select>
         </div>
+        {/* 批量操作栏 */}
+        {selectedIds.size > 0 && (
+          <div className="mt-2 flex items-center gap-2 rounded-xl bg-sky-50 px-3 py-2 text-sm">
+            <span className="font-medium text-sky-800">已选 {selectedIds.size} 项</span>
+            <button className="rounded-lg border border-sky-300 px-2.5 py-1 text-sky-700" type="button" onClick={() => { setBatchForm({ status: "", received: "", rentPart: "", electricPrice: "", waterPrice: "", sentStatus: "", note: "" }); setBatchEditOpen(true); }}>批量编辑</button>
+            <button className="rounded-lg border border-rose-300 px-2.5 py-1 text-rose-700" type="button" onClick={() => { const ids = [...selectedIds]; openConfirm("批量删除账单", `确认删除 ${ids.length} 条账单记录？此操作不可撤销。`, async () => { closeConfirm(); try { if (apiEnabled) await Promise.all(ids.map(id => deleteRecord(id).catch(() => {}))); setRecords(prev => prev.filter(r => !ids.includes(r.id))); setSelectedIds(new Set()); setError(`已删除 ${ids.length} 条记录`); } catch (e) { setError(e.message || "批量删除失败"); } }); }}>批量删除</button>
+          </div>
+        )}
         {loading ? <p className="mt-2 text-sm text-slate-500">加载中...</p> : null}
         <div className="mt-2 text-xs text-slate-500">提示：列表为精简视图，完整字段请在"编辑"或"打印"查看。</div>
         {/* 手机端：卡片视图 */}
         <div className="mt-3 grid gap-3 sm:hidden">
           {visibleRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).map((item) => (
-            <div key={item.id} className={`rounded-xl border p-3 ${flashRowId === item.id ? "bg-emerald-50 border-emerald-300" : "bg-white border-slate-200"}`}>
-              <div className="flex items-center justify-between">
-                <div><span className="font-bold text-sm">{item.room||"-"}</span><span className="text-xs text-slate-400 ml-2">{item.cycle||"-"}</span></div>
-                <button className={`rounded-full px-2.5 py-1 text-xs font-bold ${getStatusTone(item.status||"未收")}`} type="button" onClick={() => openQuickPay(item)}>{item.status||"未收"}</button>
+            <div key={item.id} className={`rounded-xl border p-3 ${selectedIds.has(item.id) ? "border-sky-400 ring-1 ring-sky-200" : "border-slate-200"} ${flashRowId === item.id ? "bg-emerald-50" : "bg-white"}`}>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-sky-600" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} />
+                <div className="flex items-center justify-between flex-1">
+                  <div><span className="font-bold text-sm">{item.room||"-"}</span><span className="text-xs text-slate-400 ml-2">{item.cycle||"-"}</span></div>
+                  <button className={`rounded-full px-2.5 py-1 text-xs font-bold ${getStatusTone(item.status||"未收")}`} type="button" onClick={() => openQuickPay(item)}>{item.status||"未收"}</button>
+                </div>
               </div>
               <div className="mt-1 text-xs text-slate-500">{item.tenant||"-"}</div>
               <div className="mt-2 flex items-center justify-between">
@@ -980,6 +1085,7 @@ const RentRecordsPage = () => {
           <table className="min-w-[1240px] text-xs md:text-sm">
             <thead className="bg-slate-50 text-slate-700">
               <tr>
+                <th className="px-2 py-2 text-center w-8"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-sky-600" checked={visibleRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).every(r => selectedIds.has(r.id))} onChange={toggleSelectAll} /></th>
                 <th className="px-2 py-2 text-left">房号</th>
                 <th className="px-2 py-2 text-left">租客</th>
                 <th className="px-2 py-2 text-left">周期</th>
@@ -995,7 +1101,8 @@ const RentRecordsPage = () => {
             </thead>
             <tbody>
               {visibleRecords.filter(r => roomFilter === "all" || (() => { const p = parseRoomText(r.room||""); return makeRoomKey(p.building, p.room); })() === roomFilter).map((item) => (
-                <tr key={item.id} className={`border-t border-sky-50 transition-colors duration-300 ${flashRowId === item.id ? "bg-emerald-50" : ""}`}>
+                <tr key={item.id} className={`border-t border-sky-50 transition-colors duration-300 ${selectedIds.has(item.id) ? "bg-sky-50" : ""} ${flashRowId === item.id ? "bg-emerald-50" : ""}`}>
+                  <td className="px-2 py-2 text-center"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-sky-600" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} /></td>
                   <td className="px-2 py-2 whitespace-nowrap">{item.room || "-"} {!activeTenantKeys.has(makeRoomKey((()=>{const p=parseRoomText(item.room||"");return p.building;})(), (()=>{const p=parseRoomText(item.room||"");return p.room;})())) && <span className="text-[10px] text-slate-400 bg-slate-100 rounded px-1">已退租</span>}</td>
                   <td className="px-2 py-2 whitespace-nowrap font-medium">{item.tenant || "-"}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{item.cycle || "-"}</td>
@@ -1036,6 +1143,52 @@ const RentRecordsPage = () => {
           </table>
         </div>
       </section>
+
+      {/* 批量编辑弹窗 */}
+      {batchEditOpen ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/35 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 my-4">
+            <h3 className="text-lg font-semibold">批量编辑（{selectedIds.size} 条）</h3>
+            <p className="mt-1 text-xs text-slate-500">留空表示不修改该字段</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-sm">收款状态
+                <select className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={batchForm.status} onChange={e => setBatchForm(p => ({ ...p, status: e.target.value }))}>
+                  <option value="">不修改</option>
+                  <option value="未收">未收</option>
+                  <option value="部份收取">部份收取</option>
+                  <option value="已收">已收</option>
+                </select>
+              </label>
+              <label className="text-sm">已收金额
+                <input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" type="number" placeholder="留空不修改" value={batchForm.received} onChange={e => setBatchForm(p => ({ ...p, received: e.target.value }))} />
+              </label>
+              <label className="text-sm">租金
+                <input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" type="number" placeholder="留空不修改" value={batchForm.rentPart} onChange={e => setBatchForm(p => ({ ...p, rentPart: e.target.value }))} />
+              </label>
+              <label className="text-sm">电费单价
+                <input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" type="number" step="0.1" placeholder="留空不修改" value={batchForm.electricPrice} onChange={e => setBatchForm(p => ({ ...p, electricPrice: e.target.value }))} />
+              </label>
+              <label className="text-sm">水费单价
+                <input className="mt-1 w-full rounded border border-sky-200 px-2 py-2" type="number" step="0.1" placeholder="留空不修改" value={batchForm.waterPrice} onChange={e => setBatchForm(p => ({ ...p, waterPrice: e.target.value }))} />
+              </label>
+              <label className="text-sm">发送状态
+                <select className="mt-1 w-full rounded border border-sky-200 px-2 py-2" value={batchForm.sentStatus} onChange={e => setBatchForm(p => ({ ...p, sentStatus: e.target.value }))}>
+                  <option value="">不修改</option>
+                  <option value="sent">已发</option>
+                  <option value="unsent">待发</option>
+                </select>
+              </label>
+              <label className="text-sm md:col-span-2">备注
+                <textarea className="mt-1 w-full rounded border border-sky-200 px-2 py-2" placeholder="留空不修改" value={batchForm.note} onChange={e => setBatchForm(p => ({ ...p, note: e.target.value }))} />
+              </label>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="rounded border border-slate-300 px-3 py-2 text-sm" type="button" onClick={() => setBatchEditOpen(false)}>取消</button>
+              <button className="rounded bg-sky-700 px-3 py-2 text-sm text-white" type="button" onClick={handleBatchEdit}>确认修改</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {formOpen ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/35 p-4">
