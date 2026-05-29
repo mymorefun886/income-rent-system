@@ -446,26 +446,26 @@ const RentRecordsPage = () => {
 
   // 新增/编辑账单时切换周期，自动更新上月水电读数
   function handleFormCycleChange(newCycle) {
-    setForm((prev) => {
-      const roomKey = (() => {
-        const p = parseRoomText(prev.room || "");
-        return p.building ? makeRoomKey(p.building, p.room) : "";
-      })();
-      if (!roomKey) return { ...prev, cycle: newCycle, dueDate: `${newCycle}-10` };
-      const prevRecords = (records || [])
-        .filter((r) => normalizeRoomMatch(r.room) === normalizeRoomMatch(prev.room) && String(r.cycle || "") < newCycle)
-        .sort((a, b) => String(b.cycle || "").localeCompare(String(a.cycle || "")));
-      const last = prevRecords[0] || null;
-      const electricPrev = last?.electricNow ?? "";
-      const waterPrev = last?.waterNow ?? "";
-      return recalcReceivable(applyOtherFeeParts(applyMeterAutoFields({
-        ...prev,
-        cycle: newCycle,
-        dueDate: `${newCycle}-10`,
-        electricPrev: String(electricPrev),
-        waterPrev: String(waterPrev),
-      })));
-    });
+    const room = form.room || "";
+    const p = parseRoomText(room);
+    const roomKey = p.building ? makeRoomKey(p.building, p.room) : "";
+    if (!roomKey) {
+      setForm((prev) => ({ ...prev, cycle: newCycle, dueDate: `${newCycle}-10` }));
+      return;
+    }
+    const prevRecords = (records || [])
+      .filter((r) => normalizeRoomMatch(r.room) === normalizeRoomMatch(room) && String(r.cycle || "") < newCycle)
+      .sort((a, b) => String(b.cycle || "").localeCompare(String(a.cycle || "")));
+    const last = prevRecords[0] || null;
+    const electricPrev = last?.electricNow ?? "";
+    const waterPrev = last?.waterNow ?? "";
+    setForm((prev) => recalcReceivable(applyOtherFeeParts(applyMeterAutoFields({
+      ...prev,
+      cycle: newCycle,
+      dueDate: `${newCycle}-10`,
+      electricPrev: String(electricPrev),
+      waterPrev: String(waterPrev),
+    }))));
   }
 
   useEffect(() => {
