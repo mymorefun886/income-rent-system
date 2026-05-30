@@ -14,3 +14,4 @@ build/
 pnpm-lock.yaml
 yarn.lock
 test-results/
+backend/storage/sessions.json
