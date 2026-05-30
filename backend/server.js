@@ -507,8 +507,11 @@ function mintSessionToken(userName) {
 
 function getAuthToken(request) {
   const header = String(request.headers.authorization || "");
-  if (!header.startsWith("Bearer ")) return "";
-  return header.replace("Bearer ", "").trim();
+  const m = header.match(/^Bearer\s+/i);
+  if (m) return header.substring(m[0].length).trim();
+  const cookie = String(request.headers.cookie || "");
+  const cm = cookie.match(/income-session=([^;]+)/);
+  return cm ? cm[1].trim() : "";
 }
 
 function isAuthed(request) {
