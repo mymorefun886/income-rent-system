@@ -16,6 +16,7 @@ import billsRouter from "./routes/bills.js";
 import backupRouter from "./routes/backup.js";
 import settingsRouter from "./routes/settings.js";
 import workOrdersRouter from "./routes/workOrders.js";
+import miscRouter from "./routes/misc.js";
 
 // ── App Setup ──
 const app = express();
@@ -59,6 +60,7 @@ app.use(billsRouter);
 app.use(backupRouter);
 app.use(settingsRouter);
 app.use(workOrdersRouter);
+app.use(miscRouter);
 
 // ── Error Handler ──
 app.use((err, req, res, next) => {
