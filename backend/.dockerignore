@@ -5,3 +5,4 @@ storage/logs
 storage/uploads
 .env
 .git
+password.env
