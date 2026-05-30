@@ -51,7 +51,7 @@ async function commitEdit() {
   async function load() {
     if (!apiEnabled) return; setLoading(true);/*patched-load*/
     try {
-      let r=null,p=null,t=null;try{r=await fetchRecords()}catch(_){};try{p=await fetchProperties()}catch(_){};try{t=await fetchTenants()}catch(_){};const __x = await Promise.all([fetchRecords(), fetchProperties(), fetchTenants()]);
+      let r=null,p=null,t=null;try{r=await fetchRecords()}catch(_){};try{p=await fetchProperties()}catch(_){};try{t=await fetchTenants()}catch(_){}
       setRecords(Array.isArray(r) ? r : []);
       setProperties(Array.isArray(p) ? p : []);
       setTenants(Array.isArray(t) ? t : []);
