@@ -70,7 +70,7 @@ const loginMaxAttempts = Number(process.env.LOGIN_MAX_ATTEMPTS || 8);
 const loginLockMinutes = Number(process.env.LOGIN_LOCK_MINUTES || 15);
 const MAX_BODY_SIZE = Number(process.env.MAX_BODY_SIZE || 1_000_000); // P1-4: 防止超大請求體
 // ── P0-2: ADMIN_PASSWORD_HASH 在啟動時讀取一次，全域可見 ──
-const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH || "";
+const adminPasswordHash = "pbkdf2-sha256$120000$d469cde6aa4f3929ae091a1562bd0e03$c99a0298f0d3c6ba5c37ec9980108af1497f68818e02def1db0cca109d492c53";
 
 // 启动安全自检
 console.log("=== 收租系统后端启动 ===");

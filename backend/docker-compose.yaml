@@ -3,8 +3,6 @@ services:
     build: .
     container_name: income-api
     restart: unless-stopped
-    env_file:
-      - ./password.env
     environment:
       PORT: 8788
       HOST: 0.0.0.0
@@ -19,6 +17,8 @@ services:
     ports:
       - "8788:8788"
     volumes:
+      - ./server.js:/app/server.js
+      - ./package.json:/app/package.json
       - ./storage:/app/storage
     networks:
       - income-net
