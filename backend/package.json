@@ -5,16 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "gen:password-hash": "node scripts/gen-password-hash.mjs",
-    "normalize:import": "node scripts/normalize-import-file.mjs",
-    "reconcile:room-keys": "node scripts/reconcile-room-keys.mjs",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "lint": "echo ok"
+    "gen:password-hash": "node gen-password-hash.mjs"
   },
   "dependencies": {
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
     "zod": "^4.4.3"
   }
 }
