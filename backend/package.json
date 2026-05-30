@@ -9,7 +9,8 @@
     "normalize:import": "node scripts/normalize-import-file.mjs",
     "reconcile:room-keys": "node scripts/reconcile-room-keys.mjs",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "lint": "echo \"backend: no linter configured, skipping\""
   },
   "dependencies": {
     "zod": "^4.4.3"
