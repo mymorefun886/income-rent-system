@@ -525,12 +525,12 @@ export default function MeterInputPage() {
                   <tr><th className="px-2 py-1.5 text-left">房号</th><th className="px-2 py-1.5 text-left">租客</th><th className="px-2 py-1.5 text-center">电</th><th className="px-2 py-1.5 text-center">水</th><th className="px-2 py-1.5 text-center">账单</th></tr>
                 </thead>
                 <tbody>{previewData.map(d=>(
-                  <tr key={d.rid} className{"border-t border-slate-50"+(d.isPaid?" bg-amber-50":"")}>
+                  <tr key={d.rid} className={"border-t border-slate-50"+(d.isPaid?" bg-amber-50":"")}>
                     <td className="px-2 py-1.5 whitespace-nowrap">{d.room.replace(/.*s/,"")}</td>
-                    <td className{"px-2 py-1.5"+(d.hasTenant?"":" text-slate-400")}>{d.tenantName}</td>
+                    <td className={"px-2 py-1.5"+(d.hasTenant?"":" text-slate-400")}>{d.tenantName}</td>
                     <td className="px-2 py-1.5 text-center">{d.prevElec?d.prevElec+"→":""}{d.newElec||"-"}</td>
                     <td className="px-2 py-1.5 text-center">{d.prevWater?d.prevWater+"→":""}{d.newWater||"-"}</td>
-                    <td className{"px-2 py-1.5 text-center text-[10px]"+(d.isPaid?" text-amber-700 font-bold":" text-slate-500")}>{d.billAction}</td>
+                    <td className={"px-2 py-1.5 text-center text-[10px]"+(d.isPaid?" text-amber-700 font-bold":" text-slate-500")}>{d.billAction}</td>
                   </tr>))}</tbody>
               </table>
             </div>
