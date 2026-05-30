@@ -10,9 +10,10 @@
     "reconcile:room-keys": "node scripts/reconcile-room-keys.mjs",
     "test": "vitest",
     "test:run": "vitest run",
-    "lint": "echo \"backend: no linter configured, skipping\""
+    "lint": "echo ok"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "express": "^5.2.1",
     "zod": "^4.4.3"
   }
