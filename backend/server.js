@@ -292,6 +292,7 @@ function sendJson(response, statusCode, payload) {
     "Access-Control-Allow-Origin": finalOrigin,
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Credentials": "true",
     // ── P1-2: Security Headers ──
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
     "X-Content-Type-Options": "nosniff",
@@ -507,11 +508,8 @@ function mintSessionToken(userName) {
 
 function getAuthToken(request) {
   const header = String(request.headers.authorization || "");
-  const m = header.match(/^Bearer\s+/i);
-  if (m) return header.substring(m[0].length).trim();
-  const cookie = String(request.headers.cookie || "");
-  const cm = cookie.match(/income-session=([^;]+)/);
-  return cm ? cm[1].trim() : "";
+  if (!header.startsWith("Bearer ")) return "";
+  return header.replace("Bearer ", "").trim();
 }
 
 function isAuthed(request) {
@@ -2240,6 +2238,7 @@ async function handler(request, response) {
       "Access-Control-Allow-Origin": finalOrigin,
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Credentials": "true",
       // P1-2 Security Headers
       "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
       "X-Content-Type-Options": "nosniff",
@@ -2684,6 +2683,7 @@ async function handler(request, response) {
       "Access-Control-Allow-Origin": finalOrigin,
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Credentials": "true",
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="records-export-${new Date().toISOString().slice(0, 10)}.csv"`,
     });
