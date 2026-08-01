@@ -5,6 +5,22 @@ import ConfirmDialog from "../components/ConfirmDialog";
 
 function makeRoomKey(b, r) { return (b||"").trim()+"::"+(r||"").replace(/\s+/g,"").toUpperCase(); }
 
+// 用 building + 房间号精确匹配记录，避免 rt.includes(room) 跨楼宇错配
+// （例如 101 同时存在于 30号A 与 17号，includes("101") 会抓到别栋的记录）
+function matchRecordRoom(r, bld, room) {
+  const rt = String(r.room || "").trim();
+  // 支持 "building roomNo" 与 "building - roomNo" 两种格式
+  const dashIdx = rt.lastIndexOf(" - ");
+  const sep = dashIdx >= 0 ? dashIdx : rt.lastIndexOf(" ");
+  if (sep > 0) {
+    const recBuilding = rt.slice(0, sep).trim();
+    const recRoom = rt.slice(dashIdx >= 0 ? sep + 3 : sep + 1).trim();
+    if (recBuilding) return recBuilding === bld && recRoom === room;
+  }
+  // 兜底：只有房间号可解析时（旧数据 building 为空）才用 includes，并限制同栋
+  return rt === `${bld} ${room}`;
+}
+
 export default function MeterInputPage() {
   const [properties, setProperties] = useState([]);
   const [records, setRecords] = useState([]);
@@ -109,10 +125,7 @@ export default function MeterInputPage() {
       const [bld, room] = rid.split("::");
       const roomText = bld + " " + room;
       const tenant = tenants.find(t => !t.archived && makeRoomKey(t.building,t.room) === rid);
-      const existing = records.find(r => {
-        const rt = String(r.room||"");
-        return (rt === roomText || rt.includes(room)) && String(r.cycle||"").trim() === cycle;
-      });
+      const existing = records.find(r => matchRecordRoom(r, bld, room) && String(r.cycle||"").trim() === cycle);
       const isPaid = existing && existing.status === "已收" && Number(existing.received||0) >= Number(existing.receivable||0);
       return {
         rid, room: roomText, tenantName: tenant?.name || (existing?.tenant || (properties.find(p => makeRoomKey(p.building,p.room) === rid)?.usageType === "自用（不出出租）" ? "自用" : "空置")),
@@ -284,14 +297,8 @@ export default function MeterInputPage() {
         const [bld, room] = rid.split("::");
         const roomText = bld + " " + room;
         const tenant = tenants.find(t => !t.archived && makeRoomKey(t.building,t.room) === rid);
-        const existing = records.find(r => {
-          const rt = String(r.room||"");
-          return (rt === roomText || rt.includes(room)) && String(r.cycle||"").trim() === cycle;
-        });
-        const lastRec = records.filter(r => {
-          const rt = String(r.room||"");
-          return (rt === roomText || rt.includes(room)) && String(r.cycle||"") < cycle;
-        }).sort((a,b) => String(b.cycle||"").localeCompare(String(a.cycle||"")))[0] || null;
+        const existing = records.find(r => matchRecordRoom(r, bld, room) && String(r.cycle||"").trim() === cycle);
+        const lastRec = records.filter(r => matchRecordRoom(r, bld, room) && String(r.cycle||"") < cycle).sort((a,b) => String(b.cycle||"").localeCompare(String(a.cycle||"")))[0] || null;
 
         const fees = Array.isArray(tenant?.feeItems) ? tenant.feeItems : [];
         const elecPrice = lastRec?.electricPrice || fees.find(f=>(f.name||"").includes("电"))?.unitPrice || "0.8";
